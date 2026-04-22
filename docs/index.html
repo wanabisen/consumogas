@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard Gas Hornos & Esmaltado</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:       #f5f6fa;
+    --surface:  #ffffff;
+    --surface2: #f0f2f8;
+    --border:   #d4d8e8;
+    --text:     #1a1d2e;
+    --muted:    #6b7280;
+    --hint:     #9ca3af;
+    --blue:     #2563eb;
+    --green:    #059669;
+    --radius:   8px;
+    --shadow:   0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.05);
+  }
+
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  header h1 { font-size: 16px; font-weight: 600; }
+  header .meta { font-size: 12px; color: var(--muted); margin-left: auto; }
+  header .meta span { font-weight: 500; color: var(--text); }
+
+  .main { max-width: 1280px; margin: 0 auto; padding: 20px 24px; }
+
+  /* Controls bar */
+  .controls {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 14px 18px;
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    margin-bottom: 18px;
+  }
+  .ctrl { display: flex; flex-direction: column; gap: 4px; }
+  .ctrl label { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .ctrl input[type=date], .ctrl select {
+    font-size: 13px;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    outline: none;
+  }
+  .ctrl input[type=date]:focus, .ctrl select:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(37,99,235,.12); }
+
+  .btn-group {
+    display: flex;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .btn-group button {
+    padding: 6px 13px;
+    font-size: 12px;
+    font-weight: 500;
+    border: none;
+    background: var(--surface);
+    color: var(--muted);
+    cursor: pointer;
+    border-right: 1px solid var(--border);
+    transition: background .15s;
+  }
+  .btn-group button:last-child { border-right: none; }
+  .btn-group button:hover { background: var(--surface2); color: var(--text); }
+  .btn-group button.active { background: var(--text); color: #fff; }
+  .btn-group button.active-mean { background: #dbeafe; color: #1d4ed8; font-weight: 600; }
+  .btn-group button.active-mode { background: #d1fae5; color: #065f46; font-weight: 600; }
+
+  .range-info { font-size: 12px; color: var(--muted); align-self: flex-end; margin-left: auto; }
+
+  /* Section tabs */
+  .section-tabs {
+    display: flex;
+    gap: 2px;
+    border-bottom: 2px solid var(--border);
+    margin-bottom: 16px;
+  }
+  .section-tab {
+    padding: 8px 20px;
+    font-size: 13px;
+    font-weight: 600;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    transition: color .15s;
+  }
+  .section-tab.active-hor { color: var(--blue); border-bottom-color: var(--blue); }
+  .section-tab.active-esm { color: var(--green); border-bottom-color: var(--green); }
+  .section-tab:not(.active-hor):not(.active-esm):hover { color: var(--text); }
+
+  .section-panel { display: none; }
+  .section-panel.active { display: block; }
+
+  /* Stats strip */
+  .stats-strip {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    box-shadow: var(--shadow);
+  }
+  .stat-card.best  { border-left: 4px solid var(--green); }
+  .stat-card.worst { border-left: 4px solid #ef4444; }
+  .stat-label { font-size: 11px; color: var(--muted); font-weight: 500; margin-bottom: 4px; text-transform: uppercase; letter-spacing: .03em; }
+  .stat-value { font-size: 22px; font-weight: 700; }
+  .stat-sub   { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  /* Chart card */
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 16px 18px;
+  }
+
+  /* Line selector */
+  .line-sel { display: flex; gap: 8px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+  .line-sel span { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+
+  /* Format tags */
+  .fmt-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .fmt-tag {
+    padding: 4px 11px;
+    font-size: 12px;
+    border-radius: 99px;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--muted);
+    transition: all .15s;
+    font-weight: 500;
+  }
+  .fmt-tag.on {
+    background: var(--text);
+    color: #fff;
+    border-color: var(--text);
+  }
+  .fmt-tag:hover:not(.on) { border-color: var(--text); color: var(--text); }
+
+  /* Zoom controls */
+  .zoom-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+  }
+  .zoom-row label { font-size: 11px; color: var(--muted); white-space: nowrap; font-weight: 500; }
+  .zoom-row input[type=range] { width: 120px; accent-color: var(--blue); }
+  .zoom-val { font-size: 12px; font-weight: 600; min-width: 34px; }
+  .zoom-btn {
+    padding: 4px 10px;
+    font-size: 11px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+    cursor: pointer;
+    color: var(--muted);
+    font-weight: 500;
+  }
+  .zoom-btn:hover { background: var(--surface2); color: var(--text); }
+
+  /* Legend */
+  .chart-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 10px; font-size: 12px; color: var(--muted); }
+  .leg-item { display: flex; align-items: center; gap: 5px; }
+  .leg-line { width: 20px; height: 3px; border-radius: 2px; flex-shrink: 0; }
+  .leg-band { width: 14px; height: 10px; border-radius: 3px; border: 1px dashed currentColor; opacity: .6; flex-shrink: 0; }
+
+  /* Chart canvas */
+  .chart-wrap { position: relative; width: 100%; }
+
+  /* Loading overlay */
+  #loading {
+    position: fixed; inset: 0;
+    background: rgba(245,246,250,.9);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 12px;
+    z-index: 999;
+    font-size: 14px;
+    color: var(--muted);
+  }
+  #loading .spinner {
+    width: 36px; height: 36px;
+    border: 3px solid var(--border);
+    border-top-color: var(--blue);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #loading.hidden { display: none; }
+
+  /* Error box */
+  #error-box {
+    background: #fef2f2;
+    border: 1px solid #fca5a5;
+    color: #991b1b;
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    margin-bottom: 16px;
+    display: none;
+  }
+  #error-box.visible { display: block; }
+
+  @media (max-width: 700px) {
+    .stats-strip { grid-template-columns: 1fr 1fr; }
+    .main { padding: 14px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="spinner"></div>
+  <span>Cargando datos…</span>
+</div>
+
+<div id="error-box"></div>
+
+<header>
+  <div>
+    <h1>⚡ Dashboard Gas — Hornos &amp; Esmaltado</h1>
+  </div>
+  <div class="meta" id="meta-info">—</div>
+</header>
+
+<div class="main">
+
+  <!-- Controls -->
+  <div class="controls">
+    <div class="ctrl">
+      <label>Desde</label>
+      <input type="date" id="d-from" onchange="onCtrlChange()">
+    </div>
+    <div class="ctrl">
+      <label>Hasta</label>
+      <input type="date" id="d-to" onchange="onCtrlChange()">
+    </div>
+    <div class="ctrl">
+      <label>Resolución</label>
+      <div class="btn-group" id="res-btns">
+        <button onclick="setRes('day',this)">Diario</button>
+        <button class="active" onclick="setRes('month',this)">Mensual</button>
+      </div>
+    </div>
+    <div class="ctrl">
+      <label>Métrica</label>
+      <div class="btn-group" id="metric-btns">
+        <button id="btn-mean" class="active-mean" onclick="setMetric('mean',this)">Media</button>
+        <button id="btn-mode" onclick="setMetric('mode',this)">Moda</button>
+      </div>
+    </div>
+    <div class="range-info" id="range-info">—</div>
+  </div>
+
+  <!-- Section tabs -->
+  <div class="section-tabs">
+    <button class="section-tab active-hor" id="tab-hor" onclick="setSect('hor',this)">🔥 Hornos</button>
+    <button class="section-tab" id="tab-esm" onclick="setSect('esm',this)">✦ Esmaltado</button>
+  </div>
+
+  <!-- HORNOS -->
+  <div class="section-panel active" id="sp-hor">
+    <div class="line-sel">
+      <span>Línea:</span>
+      <div class="btn-group" id="hor-lbtns">
+        <button class="active" onclick="setLine('hor',1,this)">L1</button>
+        <button onclick="setLine('hor',3,this)">L3</button>
+        <button onclick="setLine('hor',0,this)">Ambas</button>
+      </div>
+    </div>
+    <div class="stats-strip" id="hor-stats"></div>
+    <div class="chart-card">
+      <div class="fmt-tags" id="hor-tags"></div>
+      <div class="zoom-row">
+        <label>Eje Y mín:</label>
+        <input type="range" id="hor-ym" min="0" max="35" step="0.5" value="0" oninput="onZoom('hor')">
+        <span class="zoom-val" id="hor-ym-v">0</span>
+        <label>máx:</label>
+        <input type="range" id="hor-yx" min="5" max="45" step="0.5" value="35" oninput="onZoom('hor')">
+        <span class="zoom-val" id="hor-yx-v">35</span>
+        <button class="zoom-btn" onclick="autoZ('hor')">Auto ↺</button>
+        <button class="zoom-btn" onclick="tightZ('hor')">Ajustar</button>
+      </div>
+      <div class="chart-legend" id="hor-legend"></div>
+      <div class="chart-wrap" style="height:320px"><canvas id="hor-canvas"></canvas></div>
+    </div>
+  </div>
+
+  <!-- ESMALTADO -->
+  <div class="section-panel" id="sp-esm">
+    <div class="line-sel">
+      <span>Línea:</span>
+      <div class="btn-group" id="esm-lbtns">
+        <button class="active" onclick="setLine('esm',1,this)">L1</button>
+        <button onclick="setLine('esm',2,this)">L2</button>
+        <button onclick="setLine('esm',4,this)">L4</button>
+        <button onclick="setLine('esm',5,this)">L5</button>
+        <button onclick="setLine('esm',6,this)">L6</button>
+      </div>
+    </div>
+    <div class="stats-strip" id="esm-stats"></div>
+    <div class="chart-card">
+      <div class="fmt-tags" id="esm-tags"></div>
+      <div class="zoom-row">
+        <label>Eje Y mín:</label>
+        <input type="range" id="esm-ym" min="0" max="15" step="0.2" value="0" oninput="onZoom('esm')">
+        <span class="zoom-val" id="esm-ym-v">0</span>
+        <label>máx:</label>
+        <input type="range" id="esm-yx" min="1" max="20" step="0.2" value="15" oninput="onZoom('esm')">
+        <span class="zoom-val" id="esm-yx-v">15</span>
+        <button class="zoom-btn" onclick="autoZ('esm')">Auto ↺</button>
+        <button class="zoom-btn" onclick="tightZ('esm')">Ajustar</button>
+      </div>
+      <div class="chart-legend" id="esm-legend"></div>
+      <div class="chart-wrap" style="height:320px"><canvas id="esm-canvas"></canvas></div>
+    </div>
+  </div>
+
+</div><!-- /.main -->
+
+<script>
+// ── State ────────────────────────────────────────────────────────────────────
+let DATA = null;        // loaded from data.json
+let metric = 'mean';
+let resolution = 'month';
+const S = {
+  hor: { line: 1, yMin: 0, yMax: 35, chart: null, active: null },
+  esm: { line: 1, yMin: 0, yMax: 15, chart: null, active: null },
+};
+const PAL = [
+  '#2563eb','#059669','#dc2626','#7c3aed','#d97706',
+  '#db2777','#16a34a','#0891b2','#ca8a04','#9333ea',
+  '#0369a1','#b45309',
+];
+
+// ── Load data.json ────────────────────────────────────────────────────────────
+async function loadData() {
+  try {
+    const res = await fetch('data.json?_=' + Date.now());
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    DATA = await res.json();
+
+    // Set date range from metadata
+    document.getElementById('d-from').value = DATA.meta.date_min;
+    document.getElementById('d-to').value   = DATA.meta.date_max;
+
+    // Show meta info
+    document.getElementById('meta-info').innerHTML =
+      `Datos: <span>${DATA.meta.date_min}</span> → <span>${DATA.meta.date_max}</span>
+       &nbsp;·&nbsp; Generado: <span>${DATA.meta.generated.slice(0,16).replace('T',' ')}</span>
+       &nbsp;·&nbsp; Fuente: <span>${DATA.meta.source}</span>`;
+
+    updateRange();
+    document.getElementById('loading').classList.add('hidden');
+    initSect('hor');
+  } catch (e) {
+    document.getElementById('loading').classList.add('hidden');
+    const eb = document.getElementById('error-box');
+    eb.textContent = `Error cargando data.json: ${e.message}. Asegúrate de haber ejecutado scripts/process.py.`;
+    eb.classList.add('visible');
+  }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function getFormats(sect) {
+  if (!DATA) return [];
+  const src = DATA[sect];
+  const l = S[sect].line;
+  if (sect === 'hor' && l === 0) {
+    return [...new Set(Object.keys(src).map(k => k.split('|')[1]))];
+  }
+  return Object.keys(src).filter(k => k.startsWith(l + '|')).map(k => k.split('|')[1]);
+}
+
+function getRaw(sect, fe) {
+  if (!DATA) return null;
+  const src = DATA[sect];
+  const l = S[sect].line;
+  if (sect === 'hor' && l === 0) {
+    const s1 = src['1|' + fe], s3 = src['3|' + fe];
+    if (s1 && s3) {
+      const map = {};
+      s1.d.forEach((d, i) => { map[d] = { g1: s1.g[i] }; });
+      s3.d.forEach((d, i) => {
+        if (map[d]) map[d].g3 = s3.g[i];
+        else map[d] = { g3: s3.g[i] };
+      });
+      const days = Object.keys(map).sort();
+      const g = days.map(d => {
+        const v = map[d];
+        if (v.g1 != null && v.g3 != null)
+          return Math.round(((v.g1 + v.g3) / 2) * 100) / 100;
+        return v.g1 ?? v.g3;
+      });
+      return { d: days, g };
+    }
+    return s1 || s3 || null;
+  }
+  return src[l + '|' + fe] || null;
+}
+
+function inRange(d) {
+  const from = document.getElementById('d-from').value;
+  const to   = document.getElementById('d-to').value;
+  return d >= from && d <= to;
+}
+
+function aggregate(raw) {
+  if (!raw) return [];
+  const filt = raw.d
+    .map((d, i) => ({ d, g: raw.g[i] }))
+    .filter(r => r.g != null && inRange(r.d));
+  if (!filt.length) return [];
+
+  if (resolution === 'day') return filt.map(r => ({ label: r.d, value: r.g }));
+
+  const buckets = {};
+  filt.forEach(r => {
+    const key = r.d.slice(0, 7);
+    if (!buckets[key]) buckets[key] = [];
+    buckets[key].push(r.g);
+  });
+  const MONTHS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  return Object.entries(buckets)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, vals]) => {
+      const sorted = [...vals].sort((a, b) => a - b);
+      let value;
+      if (metric === 'mean') {
+        value = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length * 10) / 10;
+      } else {
+        const p25i = Math.floor(sorted.length * 0.25);
+        const p75i = Math.ceil(sorted.length * 0.75);
+        const mid  = sorted.slice(p25i, p75i);
+        value = mid.length
+          ? Math.round(mid.reduce((a, b) => a + b, 0) / mid.length * 10) / 10
+          : Math.round(vals[Math.floor(vals.length / 2)] * 10) / 10;
+      }
+      const [y, m] = key.split('-');
+      return { label: MONTHS[parseInt(m) - 1] + '-' + y.slice(2), value };
+    });
+}
+
+function pct(arr, p) {
+  const s = [...arr].sort((a, b) => a - b);
+  const i = (p / 100) * (s.length - 1);
+  const lo = Math.floor(i), hi = Math.ceil(i);
+  return Math.round((s[lo] + (s[hi] - s[lo]) * (i - lo)) * 10) / 10;
+}
+function calcStats(vals) {
+  const v = vals.filter(x => x != null);
+  if (!v.length) return null;
+  return {
+    mean: Math.round(v.reduce((a, b) => a + b, 0) / v.length * 10) / 10,
+    p25: pct(v, 25), p75: pct(v, 75),
+    min: Math.min(...v), max: Math.max(...v),
+    minI: v.indexOf(Math.min(...v)),
+    maxI: v.lastIndexOf(Math.max(...v)),
+  };
+}
+
+// ── UI helpers ────────────────────────────────────────────────────────────────
+function mLbl() { return metric === 'mean' ? 'Media' : 'Moda'; }
+function mClr() { return metric === 'mean' ? '#2563eb' : '#059669'; }
+
+function renderStats(sect) {
+  const allVals = [];
+  (S[sect].active || []).forEach(fe => {
+    aggregate(getRaw(sect, fe)).forEach(r => allVals.push(r.value));
+  });
+  const st = calcStats(allVals);
+  const el = document.getElementById(sect + '-stats');
+  if (!st) { el.innerHTML = ''; return; }
+  el.innerHTML = `
+    <div class="stat-card">
+      <div class="stat-label">${mLbl()} global</div>
+      <div class="stat-value" style="color:${mClr()}">${st.mean}</div>
+      <div class="stat-sub">kWht/m²</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Intervalo normal P25–P75</div>
+      <div class="stat-value">${st.p25} – ${st.p75}</div>
+      <div class="stat-sub">kWht/m²</div>
+    </div>
+    <div class="stat-card best">
+      <div class="stat-label">Mejor período</div>
+      <div class="stat-value" style="color:var(--green)">${st.min}</div>
+      <div class="stat-sub">mínimo kWht/m²</div>
+    </div>
+    <div class="stat-card worst">
+      <div class="stat-label">Peor período</div>
+      <div class="stat-value" style="color:#ef4444">${st.max}</div>
+      <div class="stat-sub">máximo kWht/m²</div>
+    </div>`;
+}
+
+function buildTags(sect) {
+  const fmts = getFormats(sect);
+  if (!S[sect].active || !S[sect].active.some(f => fmts.includes(f))) {
+    S[sect].active = fmts.slice(0, Math.min(4, fmts.length));
+  }
+  document.getElementById(sect + '-tags').innerHTML = fmts.map(fe =>
+    `<button class="fmt-tag${S[sect].active.includes(fe) ? ' on' : ''}"
+             onclick="toggleFE('${sect}','${fe}',this)">${fe}</button>`
+  ).join('');
+}
+
+function toggleFE(sect, fe, btn) {
+  const active = S[sect].active;
+  if (active.includes(fe)) {
+    if (active.length === 1) return;
+    S[sect].active = active.filter(f => f !== fe);
+    btn.classList.remove('on');
+  } else {
+    S[sect].active.push(fe);
+    btn.classList.add('on');
+  }
+  drawChart(sect);
+}
+
+// ── Chart ─────────────────────────────────────────────────────────────────────
+function drawChart(sect) {
+  renderStats(sect);
+  const s = S[sect];
+  const allLabels = new Set();
+  const series = [];
+
+  (s.active || []).forEach((fe, i) => {
+    const raw = getRaw(sect, fe);
+    const agg = aggregate(raw);
+    if (!agg.length) return;
+    agg.forEach(r => allLabels.add(r.label));
+    series.push({ fe, agg, color: PAL[i % PAL.length] });
+  });
+
+  const labels = [...allLabels].sort();
+  const datasets = [];
+
+  // Band from first series
+  const firstAgg = series[0]?.agg || [];
+  const fst = calcStats(firstAgg.map(r => r.value));
+  const bandColor = metric === 'mean' ? 'rgba(37,99,235,.07)' : 'rgba(5,150,105,.07)';
+  if (fst && firstAgg.length > 2) {
+    datasets.push({
+      label: '_bt', data: labels.map(() => fst.p75),
+      borderWidth: 0, pointRadius: 0, fill: '+1',
+      backgroundColor: bandColor, tension: 0, spanGaps: true,
+    });
+    datasets.push({
+      label: '_bb', data: labels.map(() => fst.p25),
+      borderWidth: 0, pointRadius: 0, fill: false, tension: 0, spanGaps: true,
+    });
+  }
+
+  // Data series
+  series.forEach(({ fe, agg, color }) => {
+    const map = {};
+    agg.forEach(r => map[r.label] = r.value);
+    const vals = labels.map(l => map[l] ?? null);
+    const st = calcStats(vals);
+    const ptBg = vals.map((v, j) =>
+      j === st?.minI ? '#059669' : j === st?.maxI ? '#dc2626' : color);
+    const ptR = vals.map((v, j) =>
+      (j === st?.minI || j === st?.maxI) ? 7 : v != null ? 3 : 0);
+    const ptS = vals.map((v, j) =>
+      j === st?.minI ? 'triangle' : j === st?.maxI ? 'triangle' : 'circle');
+    datasets.push({
+      label: fe, data: vals,
+      borderColor: color, borderWidth: 2.5,
+      pointRadius: ptR, pointBackgroundColor: ptBg, pointStyle: ptS,
+      tension: resolution === 'day' ? 0.1 : 0.3,
+      spanGaps: true, fill: false,
+    });
+  });
+
+  if (s.chart) s.chart.destroy();
+  s.chart = new Chart(document.getElementById(sect + '-canvas'), {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          filter: ctx => !ctx.dataset.label.startsWith('_'),
+          callbacks: {
+            label: ctx => `${ctx.dataset.label}: ${
+              ctx.parsed.y != null ? ctx.parsed.y.toFixed(1) : '—'
+            } kWht/m²`,
+          },
+        },
+      },
+      scales: {
+        x: { ticks: { font: { size: 10 }, maxRotation: 45, autoSkip: true, maxTicksLimit: resolution === 'day' ? 30 : 20 } },
+        y: {
+          min: s.yMin || undefined, max: s.yMax || undefined,
+          ticks: { font: { size: 10 } },
+          title: { display: true, text: 'kWht/m²', font: { size: 11 } },
+        },
+      },
+    },
+  });
+
+  // Legend
+  document.getElementById(sect + '-legend').innerHTML = [
+    ...series.map(({ fe, color }) =>
+      `<div class="leg-item"><div class="leg-line" style="background:${color}"></div><span>${fe}</span></div>`),
+    fst ? `<div class="leg-item"><div class="leg-band" style="background:${bandColor};border-color:${mClr()}"></div><span>Banda P25–P75 (${series[0]?.fe || ''})</span></div>` : '',
+    `<div class="leg-item"><span style="color:#059669;font-weight:700;font-size:14px">▼</span><span>Mejor</span></div>`,
+    `<div class="leg-item"><span style="color:#dc2626;font-weight:700;font-size:14px">▲</span><span>Peor</span></div>`,
+  ].join('');
+}
+
+// ── Zoom ──────────────────────────────────────────────────────────────────────
+function onZoom(sect) {
+  const s = S[sect];
+  s.yMin = parseFloat(document.getElementById(sect + '-ym').value);
+  s.yMax = parseFloat(document.getElementById(sect + '-yx').value);
+  if (s.yMin >= s.yMax - 0.5) {
+    s.yMax = s.yMin + 0.5;
+    document.getElementById(sect + '-yx').value = s.yMax;
+  }
+  document.getElementById(sect + '-ym-v').textContent = s.yMin.toFixed(1);
+  document.getElementById(sect + '-yx-v').textContent = s.yMax.toFixed(1);
+  if (s.chart) {
+    s.chart.options.scales.y.min = s.yMin;
+    s.chart.options.scales.y.max = s.yMax;
+    s.chart.update('none');
+  }
+}
+function autoZ(sect) {
+  const def = sect === 'hor' ? [0, 35] : [0, 15];
+  const s = S[sect];
+  s.yMin = def[0]; s.yMax = def[1];
+  document.getElementById(sect + '-ym').value = def[0];
+  document.getElementById(sect + '-yx').value = def[1];
+  document.getElementById(sect + '-ym-v').textContent = def[0];
+  document.getElementById(sect + '-yx-v').textContent = def[1];
+  if (s.chart) {
+    s.chart.options.scales.y.min = undefined;
+    s.chart.options.scales.y.max = undefined;
+    s.chart.update('none');
+  }
+}
+function tightZ(sect) {
+  const s = S[sect];
+  const allVals = [];
+  (s.active || []).forEach(fe => {
+    aggregate(getRaw(sect, fe)).forEach(r => allVals.push(r.value));
+  });
+  if (!allVals.length) return;
+  const lo = Math.min(...allVals), hi = Math.max(...allVals);
+  const pad = Math.max((hi - lo) * 0.15, 0.3);
+  s.yMin = Math.max(0, Math.round((lo - pad) * 4) / 4);
+  s.yMax = Math.round((hi + pad) * 4) / 4;
+  document.getElementById(sect + '-ym').value = s.yMin;
+  document.getElementById(sect + '-yx').value = s.yMax;
+  document.getElementById(sect + '-ym-v').textContent = s.yMin.toFixed(1);
+  document.getElementById(sect + '-yx-v').textContent = s.yMax.toFixed(1);
+  if (s.chart) {
+    s.chart.options.scales.y.min = s.yMin;
+    s.chart.options.scales.y.max = s.yMax;
+    s.chart.update('none');
+  }
+}
+
+// ── Control handlers ──────────────────────────────────────────────────────────
+function updateRange() {
+  const f = document.getElementById('d-from').value;
+  const t = document.getElementById('d-to').value;
+  if (f && t) {
+    const days = Math.round((new Date(t) - new Date(f)) / 86400000) + 1;
+    document.getElementById('range-info').textContent =
+      `${days} días · ${f} → ${t}`;
+  }
+}
+function onCtrlChange() { updateRange(); refreshActive(); }
+
+function setRes(r, btn) {
+  resolution = r;
+  document.querySelectorAll('#res-btns button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  refreshActive();
+}
+function setMetric(m, btn) {
+  metric = m;
+  document.getElementById('btn-mean').className = m === 'mean' ? 'active-mean' : '';
+  document.getElementById('btn-mode').className = m === 'mode' ? 'active-mode' : '';
+  refreshActive();
+}
+function setLine(sect, l, btn) {
+  S[sect].line = l;
+  document.querySelectorAll(`#${sect}-lbtns button`).forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  S[sect].active = null;
+  buildTags(sect);
+  drawChart(sect);
+}
+function setSect(name, btn) {
+  document.querySelectorAll('.section-tab').forEach(t => t.className = 'section-tab');
+  document.querySelectorAll('.section-panel').forEach(p => p.classList.remove('active'));
+  btn.className = 'section-tab active-' + name.slice(0, 3);
+  document.getElementById('sp-' + name).classList.add('active');
+  initSect(name);
+}
+
+function initSect(sect) {
+  if (!DATA) return;
+  buildTags(sect);
+  drawChart(sect);
+}
+function refreshActive() {
+  const a = document.querySelector('.section-panel.active');
+  if (!a || !DATA) return;
+  const sect = a.id.replace('sp-', '');
+  buildTags(sect);
+  drawChart(sect);
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+['hor', 'esm'].forEach(s => {
+  const def = s === 'hor' ? 35 : 15;
+  document.getElementById(s + '-ym-v').textContent = '0';
+  document.getElementById(s + '-yx-v').textContent = def;
+});
+
+loadData();
+</script>
+</body>
+</html>
