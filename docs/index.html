@@ -473,7 +473,7 @@ function aggregateCiclo(raw) {
     .filter(r => r.c != null && inRange(r.d));
   if (!filt.length) return [];
 
-  if (resolution === 'day') return filt.map(r => ({ label: r.d, value: r.c }));
+  if (resolution === 'day') return filt.map(r => ({ sortKey: r.d, label: r.d, value: r.c }));
 
   const buckets = {};
   filt.forEach(r => {
@@ -489,7 +489,7 @@ function aggregateCiclo(raw) {
       const sorted = [...vals].sort((a, b) => a - b);
       const value = Math.round(sorted[Math.floor(sorted.length / 2)]);
       const [y, m] = key.split('-');
-      return { label: MONTHS[parseInt(m) - 1] + '-' + y.slice(2), value };
+      return { sortKey: key, label: MONTHS[parseInt(m) - 1] + '-' + y.slice(2), value };
     });
 }
 
@@ -506,7 +506,7 @@ function aggregate(raw) {
     .filter(r => r.g != null && inRange(r.d));
   if (!filt.length) return [];
 
-  if (resolution === 'day') return filt.map(r => ({ label: r.d, value: r.g }));
+  if (resolution === 'day') return filt.map(r => ({ sortKey: r.d, label: r.d, value: r.g }));
 
   const buckets = {};
   filt.forEach(r => {
@@ -531,7 +531,7 @@ function aggregate(raw) {
           : Math.round(vals[Math.floor(vals.length / 2)] * 10) / 10;
       }
       const [y, m] = key.split('-');
-      return { label: MONTHS[parseInt(m) - 1] + '-' + y.slice(2), value };
+      return { sortKey: key, label: MONTHS[parseInt(m) - 1] + '-' + y.slice(2), value };
     });
 }
 
@@ -616,18 +616,25 @@ function toggleFE(sect, fe, btn) {
 function drawChart(sect) {
   renderStats(sect);
   const s = S[sect];
-  const allLabels = new Set();
   const series = [];
 
   (s.active || []).forEach((fe, i) => {
     const raw = getRaw(sect, fe);
     const agg = aggregate(raw);
     if (!agg.length) return;
-    agg.forEach(r => allLabels.add(r.label));
     series.push({ fe, agg, raw, color: PAL[i % PAL.length] });
   });
 
-  const labels = [...allLabels].sort();
+  // Build chronologically-sorted label list directly from YYYY-MM / YYYY-MM-DD keys
+  const keySet = new Set();
+  const keyToLabel = {};
+  series.forEach(({ agg }) => agg.forEach(r => {
+    keySet.add(r.sortKey);
+    keyToLabel[r.sortKey] = r.label;
+  }));
+  const sortedKeys = [...keySet].sort(); // YYYY-MM or YYYY-MM-DD: string sort = chronological
+  const labels = sortedKeys.map(k => keyToLabel[k] ?? k);
+
   const datasets = [];
 
   // Band from first series
@@ -649,8 +656,8 @@ function drawChart(sect) {
   // Gas series (left axis)
   series.forEach(({ fe, agg, color }) => {
     const map = {};
-    agg.forEach(r => map[r.label] = r.value);
-    const vals = labels.map(l => map[l] ?? null);
+    agg.forEach(r => map[r.sortKey ?? r.label] = r.value);
+    const vals = sortedKeys.map(k => map[k] ?? null);
     const st = calcStats(vals);
     const ptBg = vals.map((v, j) =>
       j === st?.minI ? '#059669' : j === st?.maxI ? '#dc2626' : color);
@@ -675,8 +682,8 @@ function drawChart(sect) {
       const cicloAgg = aggregateCiclo(raw);
       if (!cicloAgg.length) return;
       const map = {};
-      cicloAgg.forEach(r => map[r.label] = r.value);
-      const vals = labels.map(l => map[l] ?? null);
+      cicloAgg.forEach(r => map[r.sortKey ?? r.label] = r.value);
+      const vals = sortedKeys.map(k => map[k] ?? null);
       cicloDatasets.push({ fe, vals, color });
       datasets.push({
         label: `ciclo|${fe}`,
