@@ -65,8 +65,8 @@ def kde_mode(vals: np.ndarray) -> float | None:
 
 
 # ── Límites para ciclo (minutos): valores fuera de rango = transición/parada ──
-CICLO_MIN = 0.5    # menos de 30 s → ruido
-CICLO_MAX = 60.0   # más de 60 min → horno parado, no cuenta
+CICLO_MIN = 20.0    # menos de 20 min → ruido / error de medición
+CICLO_MAX = 120.0   # más de 120 min → horno parado o en transición
 
 
 # ── Carga y filtrado ───────────────────────────────────────────────────────────
