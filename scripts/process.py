@@ -16,6 +16,7 @@ from pathlib import Path
 
 import pandas as pd
 import numpy as np
+from scipy import stats as spstats
 
 # ── Configuración ──────────────────────────────────────────────────────────────
 ROOT = Path(__file__).resolve().parent.parent
@@ -49,6 +50,25 @@ def norm_fmt_esm(f):
     return FMT_MAP_ESM.get(f, f)
 
 
+# ── KDE mode para datos continuos ─────────────────────────────────────────────
+def kde_mode(vals: np.ndarray) -> float | None:
+    """Devuelve la moda estimada por KDE (pico de densidad)."""
+    v = vals[~np.isnan(vals)]
+    if len(v) < 3:
+        return round(float(np.median(v)), 0) if len(v) > 0 else None
+    try:
+        kde = spstats.gaussian_kde(v, bw_method="silverman")
+        x = np.linspace(np.percentile(v, 5), np.percentile(v, 95), 400)
+        return round(float(x[np.argmax(kde(x))]), 0)
+    except Exception:
+        return round(float(np.median(v)), 0)
+
+
+# ── Límites para ciclo (minutos): valores fuera de rango = transición/parada ──
+CICLO_MIN = 0.5    # menos de 30 s → ruido
+CICLO_MAX = 60.0   # más de 60 min → horno parado, no cuenta
+
+
 # ── Carga y filtrado ───────────────────────────────────────────────────────────
 def load_hornos(path: Path) -> pd.DataFrame:
     df = pd.read_excel(path, sheet_name=SHEET_HOR, header=0)
@@ -72,16 +92,27 @@ def load_esmaltado(path: Path) -> pd.DataFrame:
 
 # ── Agregación diaria ──────────────────────────────────────────────────────────
 def daily_series(df: pd.DataFrame, line_col: str, fe_col: str,
-                 gas_col: str, m2_col: str) -> pd.DataFrame:
+                 gas_col: str, m2_col: str,
+                 ciclo_col: str | None = None) -> pd.DataFrame:
     df = df.copy()
     df["day"] = df["hora"].dt.date
+
+    def agg_group(g):
+        m2_sum = g[m2_col].sum()
+        gas_wm = (g[gas_col] * g[m2_col]).sum() / m2_sum if m2_sum > 0 else None
+        result = {"gas_wm": gas_wm, "m2": m2_sum}
+        if ciclo_col and ciclo_col in g.columns:
+            ciclo_vals = g[ciclo_col].dropna().values
+            # filter to realistic range
+            ciclo_vals = ciclo_vals[
+                (ciclo_vals >= CICLO_MIN) & (ciclo_vals <= CICLO_MAX)
+            ]
+            result["ciclo_mode"] = kde_mode(ciclo_vals) if len(ciclo_vals) >= 3 else None
+        return pd.Series(result)
+
     agg = (
         df.groupby(["day", line_col, fe_col])
-        .apply(lambda g: pd.Series({
-            "gas_wm": (g[gas_col] * g[m2_col]).sum() / g[m2_col].sum()
-                      if g[m2_col].sum() > 0 else None,
-            "m2": g[m2_col].sum(),
-        }))
+        .apply(agg_group)
         .reset_index()
     )
     return agg
@@ -89,7 +120,7 @@ def daily_series(df: pd.DataFrame, line_col: str, fe_col: str,
 
 # ── Construcción del dict de series ───────────────────────────────────────────
 def build_series(daily: pd.DataFrame, line_col: str, fe_col: str,
-                 tops: dict) -> dict:
+                 tops: dict, include_ciclo: bool = False) -> dict:
     out = {}
     for line, fmts in tops.items():
         sub = daily[(daily[line_col] == line) & (daily[fe_col].isin(fmts))]
@@ -98,7 +129,7 @@ def build_series(daily: pd.DataFrame, line_col: str, fe_col: str,
             if fe_sub.empty:
                 continue
             key = f"{line}|{fe}"
-            out[key] = {
+            entry = {
                 "d": [str(r["day"]) for _, r in fe_sub.iterrows()],
                 "g": [
                     round(float(r["gas_wm"]), 2) if pd.notna(r["gas_wm"]) else None
@@ -106,6 +137,12 @@ def build_series(daily: pd.DataFrame, line_col: str, fe_col: str,
                 ],
                 "m": [round(float(r["m2"]), 0) for _, r in fe_sub.iterrows()],
             }
+            if include_ciclo and "ciclo_mode" in fe_sub.columns:
+                entry["c"] = [
+                    int(r["ciclo_mode"]) if pd.notna(r["ciclo_mode"]) else None
+                    for _, r in fe_sub.iterrows()
+                ]
+            out[key] = entry
     return out
 
 
@@ -130,6 +167,14 @@ def main():
     # Hornos
     print("  → Procesando Hornos…")
     df_hor = load_hornos(xlsx_path)
+
+    # Detectar columna ciclo (puede no existir en archivos antiguos)
+    has_ciclo = "ciclo" in df_hor.columns
+    if has_ciclo:
+        print("     columna 'ciclo' detectada ✓")
+    else:
+        print("     columna 'ciclo' NO encontrada (se omite)")
+
     hor_tops = {}
     for line in [1, 3]:
         hor_tops[line] = (
@@ -139,8 +184,11 @@ def main():
             .head(TOP_N_HOR)
             .index.tolist()
         )
-    hor_daily = daily_series(df_hor, "linea", "fe", "iGAS_kwht/m2", "m2_salida")
-    hor_series = build_series(hor_daily, "linea", "fe", hor_tops)
+    hor_daily = daily_series(
+        df_hor, "linea", "fe", "iGAS_kwht/m2", "m2_salida",
+        ciclo_col="ciclo" if has_ciclo else None,
+    )
+    hor_series = build_series(hor_daily, "linea", "fe", hor_tops, include_ciclo=has_ciclo)
 
     # Esmaltado
     print("  → Procesando Esmaltado…")
@@ -169,6 +217,7 @@ def main():
             "date_max": date_max,
             "generated": pd.Timestamp.now().strftime("%Y-%m-%dT%H:%M:%S"),
             "source": xlsx_path.name,
+            "has_ciclo": has_ciclo,
         },
         "hor": hor_series,
         "esm": esm_series,
