@@ -203,7 +203,19 @@
   .chart-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 10px; font-size: 12px; color: var(--muted); }
   .leg-item { display: flex; align-items: center; gap: 5px; }
   .leg-line { width: 20px; height: 3px; border-radius: 2px; flex-shrink: 0; }
+  .leg-dashed { width: 20px; height: 0; border-top: 2px dashed currentColor; flex-shrink: 0; }
   .leg-band { width: 14px; height: 10px; border-radius: 3px; border: 1px dashed currentColor; opacity: .6; flex-shrink: 0; }
+
+  /* Ciclo toggle */
+  .ciclo-toggle {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 12px; border-radius: 99px; font-size: 12px; font-weight: 500;
+    border: 1px solid #f59e0b; background: #fffbeb; color: #92400e;
+    cursor: pointer; transition: all .15s; margin-bottom: 10px;
+  }
+  .ciclo-toggle.off { background: var(--surface2); border-color: var(--border); color: var(--muted); }
+  .ciclo-toggle .dot { width: 8px; height: 8px; border-radius: 50%; background: #f59e0b; flex-shrink: 0; }
+  .ciclo-toggle.off .dot { background: var(--hint); }
 
   /* Chart canvas */
   .chart-wrap { position: relative; width: 100%; }
@@ -322,6 +334,11 @@
         <button class="zoom-btn" onclick="tightZ('hor')">Ajustar</button>
       </div>
       <div class="chart-legend" id="hor-legend"></div>
+      <div id="hor-ciclo-row" style="display:none">
+        <button class="ciclo-toggle" id="hor-ciclo-btn" onclick="toggleCiclo()">
+          <span class="dot"></span> Mostrar ciclo (min) — eje derecho
+        </button>
+      </div>
       <div class="chart-wrap" style="height:320px"><canvas id="hor-canvas"></canvas></div>
     </div>
   </div>
@@ -363,6 +380,7 @@
 let DATA = null;        // loaded from data.json
 let metric = 'mean';
 let resolution = 'month';
+let showCiclo = true;   // show ciclo on right axis (hornos only)
 const S = {
   hor: { line: 1, yMin: 0, yMax: 35, chart: null, active: null },
   esm: { line: 1, yMin: 0, yMax: 15, chart: null, active: null },
@@ -420,10 +438,10 @@ function getRaw(sect, fe) {
     const s1 = src['1|' + fe], s3 = src['3|' + fe];
     if (s1 && s3) {
       const map = {};
-      s1.d.forEach((d, i) => { map[d] = { g1: s1.g[i] }; });
+      s1.d.forEach((d, i) => { map[d] = { g1: s1.g[i], c1: s1.c?.[i] ?? null }; });
       s3.d.forEach((d, i) => {
-        if (map[d]) map[d].g3 = s3.g[i];
-        else map[d] = { g3: s3.g[i] };
+        if (map[d]) { map[d].g3 = s3.g[i]; map[d].c3 = s3.c?.[i] ?? null; }
+        else map[d] = { g3: s3.g[i], c3: s3.c?.[i] ?? null };
       });
       const days = Object.keys(map).sort();
       const g = days.map(d => {
@@ -432,11 +450,47 @@ function getRaw(sect, fe) {
           return Math.round(((v.g1 + v.g3) / 2) * 100) / 100;
         return v.g1 ?? v.g3;
       });
-      return { d: days, g };
+      // For ciclo when both lines: average the modes (both are already integers)
+      const c = days.map(d => {
+        const v = map[d];
+        const cv = [v.c1, v.c3].filter(x => x != null);
+        if (!cv.length) return null;
+        return Math.round(cv.reduce((a, b) => a + b, 0) / cv.length);
+      });
+      return { d: days, g, c };
     }
-    return s1 || s3 || null;
+    const s = s1 || s3 || null;
+    return s;
   }
   return src[l + '|' + fe] || null;
+}
+
+// Aggregate ciclo (already daily KDE-mode integers → just average across days in month)
+function aggregateCiclo(raw) {
+  if (!raw?.c) return [];
+  const filt = raw.d
+    .map((d, i) => ({ d, c: raw.c[i] }))
+    .filter(r => r.c != null && inRange(r.d));
+  if (!filt.length) return [];
+
+  if (resolution === 'day') return filt.map(r => ({ label: r.d, value: r.c }));
+
+  const buckets = {};
+  filt.forEach(r => {
+    const key = r.d.slice(0, 7);
+    if (!buckets[key]) buckets[key] = [];
+    buckets[key].push(r.c);
+  });
+  const MONTHS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  return Object.entries(buckets)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, vals]) => {
+      // Moda de las modas diarias: mediana redondeada
+      const sorted = [...vals].sort((a, b) => a - b);
+      const value = Math.round(sorted[Math.floor(sorted.length / 2)]);
+      const [y, m] = key.split('-');
+      return { label: MONTHS[parseInt(m) - 1] + '-' + y.slice(2), value };
+    });
 }
 
 function inRange(d) {
@@ -570,7 +624,7 @@ function drawChart(sect) {
     const agg = aggregate(raw);
     if (!agg.length) return;
     agg.forEach(r => allLabels.add(r.label));
-    series.push({ fe, agg, color: PAL[i % PAL.length] });
+    series.push({ fe, agg, raw, color: PAL[i % PAL.length] });
   });
 
   const labels = [...allLabels].sort();
@@ -584,15 +638,15 @@ function drawChart(sect) {
     datasets.push({
       label: '_bt', data: labels.map(() => fst.p75),
       borderWidth: 0, pointRadius: 0, fill: '+1',
-      backgroundColor: bandColor, tension: 0, spanGaps: true,
+      backgroundColor: bandColor, tension: 0, spanGaps: true, yAxisID: 'y',
     });
     datasets.push({
       label: '_bb', data: labels.map(() => fst.p25),
-      borderWidth: 0, pointRadius: 0, fill: false, tension: 0, spanGaps: true,
+      borderWidth: 0, pointRadius: 0, fill: false, tension: 0, spanGaps: true, yAxisID: 'y',
     });
   }
 
-  // Data series
+  // Gas series (left axis)
   series.forEach(({ fe, agg, color }) => {
     const map = {};
     agg.forEach(r => map[r.label] = r.value);
@@ -609,9 +663,72 @@ function drawChart(sect) {
       borderColor: color, borderWidth: 2.5,
       pointRadius: ptR, pointBackgroundColor: ptBg, pointStyle: ptS,
       tension: resolution === 'day' ? 0.1 : 0.3,
-      spanGaps: true, fill: false,
+      spanGaps: true, fill: false, yAxisID: 'y',
     });
   });
+
+  // Ciclo series (right axis) — only for hornos, only first active format
+  const hasCiclo = sect === 'hor' && DATA?.meta?.has_ciclo && showCiclo && series.length > 0;
+  const cicloDatasets = [];
+  if (hasCiclo) {
+    series.forEach(({ fe, raw, color }) => {
+      const cicloAgg = aggregateCiclo(raw);
+      if (!cicloAgg.length) return;
+      const map = {};
+      cicloAgg.forEach(r => map[r.label] = r.value);
+      const vals = labels.map(l => map[l] ?? null);
+      cicloDatasets.push({ fe, vals, color });
+      datasets.push({
+        label: `ciclo|${fe}`,
+        data: vals,
+        borderColor: color,
+        borderWidth: 1.5,
+        borderDash: [5, 3],
+        pointRadius: vals.map(v => v != null ? 2 : 0),
+        pointBackgroundColor: color,
+        tension: resolution === 'day' ? 0.1 : 0.3,
+        spanGaps: true, fill: false,
+        yAxisID: 'y2',
+      });
+    });
+  }
+
+  // Show/hide ciclo toggle button
+  const cicloRow = document.getElementById('hor-ciclo-row');
+  if (sect === 'hor' && DATA?.meta?.has_ciclo) {
+    cicloRow.style.display = 'block';
+    const btn = document.getElementById('hor-ciclo-btn');
+    btn.className = 'ciclo-toggle' + (showCiclo ? '' : ' off');
+    btn.innerHTML = `<span class="dot"></span> ${showCiclo ? 'Ocultar' : 'Mostrar'} ciclo (min) — eje derecho`;
+  } else if (cicloRow) {
+    cicloRow.style.display = 'none';
+  }
+
+  // Scales config
+  const scales = {
+    x: {
+      ticks: { font: { size: 10 }, maxRotation: 45, autoSkip: true,
+               maxTicksLimit: resolution === 'day' ? 30 : 20 },
+    },
+    y: {
+      min: s.yMin || undefined, max: s.yMax || undefined,
+      ticks: { font: { size: 10 } },
+      title: { display: true, text: 'Gas (kWht/m²)', font: { size: 11 }, color: '#6b7280' },
+      position: 'left',
+    },
+  };
+  if (hasCiclo && cicloDatasets.length) {
+    scales.y2 = {
+      position: 'right',
+      ticks: {
+        font: { size: 10 },
+        color: '#d97706',
+        callback: v => Math.round(v) + ' min',
+      },
+      title: { display: true, text: 'Ciclo (min)', font: { size: 11 }, color: '#d97706' },
+      grid: { drawOnChartArea: false },
+    };
+  }
 
   if (s.chart) s.chart.destroy();
   s.chart = new Chart(document.getElementById(sect + '-canvas'), {
@@ -619,36 +736,44 @@ function drawChart(sect) {
     data: { labels, datasets },
     options: {
       responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
       plugins: {
         legend: { display: false },
         tooltip: {
           filter: ctx => !ctx.dataset.label.startsWith('_'),
           callbacks: {
-            label: ctx => `${ctx.dataset.label}: ${
-              ctx.parsed.y != null ? ctx.parsed.y.toFixed(1) : '—'
-            } kWht/m²`,
+            label: ctx => {
+              if (ctx.dataset.label.startsWith('ciclo|')) {
+                const fe = ctx.dataset.label.replace('ciclo|', '');
+                return `${fe} ciclo: ${ctx.parsed.y != null ? Math.round(ctx.parsed.y) : '—'} min`;
+              }
+              return `${ctx.dataset.label}: ${
+                ctx.parsed.y != null ? ctx.parsed.y.toFixed(1) : '—'
+              } kWht/m²`;
+            },
           },
         },
       },
-      scales: {
-        x: { ticks: { font: { size: 10 }, maxRotation: 45, autoSkip: true, maxTicksLimit: resolution === 'day' ? 30 : 20 } },
-        y: {
-          min: s.yMin || undefined, max: s.yMax || undefined,
-          ticks: { font: { size: 10 } },
-          title: { display: true, text: 'kWht/m²', font: { size: 11 } },
-        },
-      },
+      scales,
     },
   });
 
   // Legend
-  document.getElementById(sect + '-legend').innerHTML = [
+  const legItems = [
     ...series.map(({ fe, color }) =>
-      `<div class="leg-item"><div class="leg-line" style="background:${color}"></div><span>${fe}</span></div>`),
-    fst ? `<div class="leg-item"><div class="leg-band" style="background:${bandColor};border-color:${mClr()}"></div><span>Banda P25–P75 (${series[0]?.fe || ''})</span></div>` : '',
-    `<div class="leg-item"><span style="color:#059669;font-weight:700;font-size:14px">▼</span><span>Mejor</span></div>`,
-    `<div class="leg-item"><span style="color:#dc2626;font-weight:700;font-size:14px">▲</span><span>Peor</span></div>`,
-  ].join('');
+      `<div class="leg-item"><div class="leg-line" style="background:${color}"></div><span>${fe} — gas</span></div>`),
+    fst ? `<div class="leg-item"><div class="leg-band" style="background:${bandColor};border-color:${mClr()}"></div><span>Banda P25–P75</span></div>` : '',
+    `<div class="leg-item"><span style="color:#059669;font-weight:700;font-size:14px">▼</span><span>Mejor gas</span></div>`,
+    `<div class="leg-item"><span style="color:#dc2626;font-weight:700;font-size:14px">▲</span><span>Peor gas</span></div>`,
+  ];
+  if (hasCiclo && cicloDatasets.length) {
+    cicloDatasets.forEach(({ fe, color }) => {
+      legItems.push(
+        `<div class="leg-item" style="color:#d97706"><div class="leg-dashed" style="border-color:${color}"></div><span>${fe} — ciclo (min, moda)</span></div>`
+      );
+    });
+  }
+  document.getElementById(sect + '-legend').innerHTML = legItems.join('');
 }
 
 // ── Zoom ──────────────────────────────────────────────────────────────────────
@@ -715,6 +840,11 @@ function updateRange() {
   }
 }
 function onCtrlChange() { updateRange(); refreshActive(); }
+
+function toggleCiclo() {
+  showCiclo = !showCiclo;
+  drawChart('hor');
+}
 
 function setRes(r, btn) {
   resolution = r;
