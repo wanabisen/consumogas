@@ -26,11 +26,9 @@ OUTPUT_JSON  = ROOT / "docs" / "data.json"
 SHEET_HOR = "v_hornosHoraGasEnergiaDisponibi"
 SHEET_ESM = "v_esmalt_HoraGasEnergiaDisponib"
 
-# Límites de intensidad por línea (outliers claros = arranques / paradas)
 LINE_CUTS_HOR = {1: 100, 3: 100}
 LINE_CUTS_ESM = {1: 160, 2: 333, 4: 117, 5: 116, 6: 62}
 
-# Top N formatos por línea a incluir
 TOP_N_HOR = 10
 TOP_N_ESM = 8
 
@@ -50,9 +48,8 @@ def norm_fmt_esm(f):
     return FMT_MAP_ESM.get(f, f)
 
 
-# ── KDE mode para datos continuos ─────────────────────────────────────────────
-def kde_mode(vals: np.ndarray) -> float | None:
-    """Devuelve la moda estimada por KDE (pico de densidad)."""
+# ── KDE mode para ciclo ────────────────────────────────────────────────────────
+def kde_mode(vals: np.ndarray):
     v = vals[~np.isnan(vals)]
     if len(v) < 3:
         return round(float(np.median(v)), 0) if len(v) > 0 else None
@@ -64,9 +61,8 @@ def kde_mode(vals: np.ndarray) -> float | None:
         return round(float(np.median(v)), 0)
 
 
-# ── Límites para ciclo (minutos): valores fuera de rango = transición/parada ──
-CICLO_MIN = 20.0    # menos de 20 min → ruido / error de medición
-CICLO_MAX = 120.0   # más de 120 min → horno parado o en transición
+CICLO_MIN = 20.0
+CICLO_MAX = 120.0
 
 
 # ── Carga y filtrado ───────────────────────────────────────────────────────────
@@ -75,7 +71,8 @@ def load_hornos(path: Path) -> pd.DataFrame:
     df["hora"] = pd.to_datetime(df["hora"])
     df = df[(df["m2_salida"] > 0) & (df["iGAS_kwht/m2"] > 3)].copy()
     df = df[df.apply(lambda r: r["iGAS_kwht/m2"] < LINE_CUTS_HOR.get(r["linea"], 100), axis=1)]
-    df["fe"] = df["Formato + Espesor"]
+    # === CAMBIO: usar "Formato" en vez de "Formato + Espesor" ===
+    df["fe"] = df["Formato"]
     df = df[df["fe"].notna()]
     return df
 
@@ -103,10 +100,7 @@ def daily_series(df: pd.DataFrame, line_col: str, fe_col: str,
         result = {"gas_wm": gas_wm, "m2": m2_sum}
         if ciclo_col and ciclo_col in g.columns:
             ciclo_vals = g[ciclo_col].dropna().values
-            # filter to realistic range
-            ciclo_vals = ciclo_vals[
-                (ciclo_vals >= CICLO_MIN) & (ciclo_vals <= CICLO_MAX)
-            ]
+            ciclo_vals = ciclo_vals[(ciclo_vals >= CICLO_MIN) & (ciclo_vals <= CICLO_MAX)]
             result["ciclo_mode"] = kde_mode(ciclo_vals) if len(ciclo_vals) >= 3 else None
         return pd.Series(result)
 
@@ -146,13 +140,10 @@ def build_series(daily: pd.DataFrame, line_col: str, fe_col: str,
     return out
 
 
-# ── Main ───────────────────────────────────────────────────────────────────────
 def main():
     parser = argparse.ArgumentParser(description="Genera data.json para el dashboard.")
-    parser.add_argument("--input", type=str, default=str(DEFAULT_XLSX),
-                        help="Ruta al fichero .xlsx")
-    parser.add_argument("--output", type=str, default=str(OUTPUT_JSON),
-                        help="Ruta de salida del JSON")
+    parser.add_argument("--input", type=str, default=str(DEFAULT_XLSX))
+    parser.add_argument("--output", type=str, default=str(OUTPUT_JSON))
     args = parser.parse_args()
 
     xlsx_path = Path(args.input)
@@ -168,7 +159,6 @@ def main():
     print("  → Procesando Hornos…")
     df_hor = load_hornos(xlsx_path)
 
-    # Detectar columna ciclo (puede no existir en archivos antiguos)
     has_ciclo = "ciclo" in df_hor.columns
     if has_ciclo:
         print("     columna 'ciclo' detectada ✓")
@@ -205,7 +195,6 @@ def main():
     esm_daily = daily_series(df_esm, "linea", "fe", "iGAS_kwht/m2", "m2_salida")
     esm_series = build_series(esm_daily, "linea", "fe", esm_tops)
 
-    # Estadísticas de rango
     all_dates_hor = [d for s in hor_series.values() for d in s["d"]]
     all_dates_esm = [d for s in esm_series.values() for d in s["d"]]
     date_min = min(all_dates_hor + all_dates_esm)
