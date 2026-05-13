@@ -31,6 +31,7 @@ LINE_CUTS_ESM = {1: 160, 2: 333, 4: 117, 5: 116, 6: 62}
 
 TOP_N_HOR = 10
 TOP_N_ESM = 8
+MIN_M2_HOR = 1000   # m² totales mínimos para incluir un formato de horno
 
 # ── Normalización de formatos esmaltado ────────────────────────────────────────
 FMT_MAP_ESM = {
@@ -71,9 +72,10 @@ def load_hornos(path: Path) -> pd.DataFrame:
     df["hora"] = pd.to_datetime(df["hora"])
     df = df[(df["m2_salida"] > 0) & (df["iGAS_kwht/m2"] > 3)].copy()
     df = df[df.apply(lambda r: r["iGAS_kwht/m2"] < LINE_CUTS_HOR.get(r["linea"], 100), axis=1)]
-    # === CAMBIO: usar "Formato" en vez de "Formato + Espesor" ===
     df["fe"] = df["Formato"]
     df = df[df["fe"].notna()]
+    # Excluir formatos basura
+    df = df[df["fe"] != "No encontrado"]
     return df
 
 
@@ -167,13 +169,12 @@ def main():
 
     hor_tops = {}
     for line in [1, 3]:
-        hor_tops[line] = (
-            df_hor[df_hor["linea"] == line]
-            .groupby("fe")["m2_salida"].sum()
-            .sort_values(ascending=False)
-            .head(TOP_N_HOR)
-            .index.tolist()
-        )
+        sub = df_hor[df_hor["linea"] == line]
+        m2_per_fmt = sub.groupby("fe")["m2_salida"].sum()
+        # Incluir todos los formatos con >= MIN_M2_HOR m² totales
+        # Ordenados por m² descendente (más relevantes primero)
+        eligible = m2_per_fmt[m2_per_fmt >= MIN_M2_HOR]
+        hor_tops[line] = eligible.sort_values(ascending=False).index.tolist()
     hor_daily = daily_series(
         df_hor, "linea", "fe", "iGAS_kwht/m2", "m2_salida",
         ciclo_col="ciclo" if has_ciclo else None,
