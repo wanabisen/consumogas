@@ -372,7 +372,7 @@ function calcStats(vals) {
   const v = vals.filter(x => x != null);
   if (!v.length) return null;
   return { mean: Math.round(v.reduce((a, b) => a + b, 0) / v.length * 10) / 10,
-    p25: pct(v, 25), p75: pct(v, 75),
+    p25: pct(v, 25), p50: pct(v, 50), p75: pct(v, 75),
     min: Math.min(...v), max: Math.max(...v),
     minI: v.indexOf(Math.min(...v)), maxI: v.lastIndexOf(Math.max(...v)) };
 }
@@ -388,7 +388,11 @@ function renderStats(sect) {
   if (!st) { el.innerHTML = ''; return; }
   el.innerHTML = `
     <div class="stat-card"><div class="stat-label">${mLbl()} global</div><div class="stat-value" style="color:${mClr()}">${st.mean}</div><div class="stat-sub">kWht/m²</div></div>
-    <div class="stat-card"><div class="stat-label">Intervalo normal P25–P75</div><div class="stat-value">${st.p25} – ${st.p75}</div><div class="stat-sub">kWht/m²</div></div>
+    <div class="stat-card">
+      <div class="stat-label">Rango normal · P25 – <b>P50</b> – P75</div>
+      <div class="stat-value">${st.p25} · <span style="color:var(--blue)">${st.p50}</span> · ${st.p75}</div>
+      <div class="stat-sub">mediana resaltada</div>
+    </div>
     <div class="stat-card best"><div class="stat-label">Mejor período</div><div class="stat-value" style="color:var(--green)">${st.min}</div><div class="stat-sub">mínimo kWht/m²</div></div>
     <div class="stat-card worst"><div class="stat-label">Peor período</div><div class="stat-value" style="color:#ef4444">${st.max}</div><div class="stat-sub">máximo kWht/m²</div></div>`;
 }
