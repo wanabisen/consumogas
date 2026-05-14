@@ -142,6 +142,44 @@ def build_series(daily: pd.DataFrame, line_col: str, fe_col: str,
     return out
 
 
+# ── Series HORARIAS ────────────────────────────────────────────────────────────
+def build_hourly_series(df: pd.DataFrame, line_col: str, fe_col: str,
+                        gas_col: str, m2_col: str, tops: dict,
+                        ciclo_col: str | None = None) -> dict:
+    """
+    Construye series horarias por (línea, formato). Cada serie almacena:
+      h: lista de timestamps ISO "YYYY-MM-DDTHH:MM"
+      g: lista de intensidades de gas (kWht/m²)
+      m: lista de m² producidos en esa hora
+      c: lista de ciclos (sólo hornos, si include_ciclo)
+    Sólo se incluyen las horas con producción válida (m2 > 0, gas en rango).
+    """
+    out = {}
+    for line, fmts in tops.items():
+        sub = df[(df[line_col] == line) & (df[fe_col].isin(fmts))]
+        for fe in fmts:
+            fe_sub = sub[sub[fe_col] == fe].sort_values("hora")
+            if fe_sub.empty:
+                continue
+            key = f"{line}|{fe}"
+            entry = {
+                "h": [r.strftime("%Y-%m-%dT%H:%M") for r in fe_sub["hora"]],
+                "g": [round(float(v), 2) for v in fe_sub[gas_col]],
+                "m": [round(float(v), 1) for v in fe_sub[m2_col]],
+            }
+            if ciclo_col and ciclo_col in fe_sub.columns:
+                # Filtrar ciclo: NaN o fuera de rango → null
+                ciclos = []
+                for v in fe_sub[ciclo_col]:
+                    if pd.isna(v) or v < CICLO_MIN or v > CICLO_MAX:
+                        ciclos.append(None)
+                    else:
+                        ciclos.append(round(float(v), 0))
+                entry["c"] = [int(c) if c is not None else None for c in ciclos]
+            out[key] = entry
+    return out
+
+
 def main():
     parser = argparse.ArgumentParser(description="Genera data.json para el dashboard.")
     parser.add_argument("--input", type=str, default=str(DEFAULT_XLSX))
@@ -180,6 +218,10 @@ def main():
         ciclo_col="ciclo" if has_ciclo else None,
     )
     hor_series = build_series(hor_daily, "linea", "fe", hor_tops, include_ciclo=has_ciclo)
+    hor_hourly = build_hourly_series(
+        df_hor, "linea", "fe", "iGAS_kwht/m2", "m2_salida", hor_tops,
+        ciclo_col="ciclo" if has_ciclo else None,
+    )
 
     # Esmaltado
     print("  → Procesando Esmaltado…")
@@ -195,6 +237,9 @@ def main():
         )
     esm_daily = daily_series(df_esm, "linea", "fe", "iGAS_kwht/m2", "m2_salida")
     esm_series = build_series(esm_daily, "linea", "fe", esm_tops)
+    esm_hourly = build_hourly_series(
+        df_esm, "linea", "fe", "iGAS_kwht/m2", "m2_salida", esm_tops
+    )
 
     all_dates_hor = [d for s in hor_series.values() for d in s["d"]]
     all_dates_esm = [d for s in esm_series.values() for d in s["d"]]
@@ -208,9 +253,12 @@ def main():
             "generated": pd.Timestamp.now().strftime("%Y-%m-%dT%H:%M:%S"),
             "source": xlsx_path.name,
             "has_ciclo": has_ciclo,
+            "has_hourly": True,
         },
         "hor": hor_series,
         "esm": esm_series,
+        "hor_h": hor_hourly,
+        "esm_h": esm_hourly,
     }
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -218,8 +266,10 @@ def main():
         json.dump(output, f, separators=(",", ":"), ensure_ascii=False)
 
     size_kb = out_path.stat().st_size / 1024
-    print(f"  ✓ Hornos:    {len(hor_series)} series")
-    print(f"  ✓ Esmaltado: {len(esm_series)} series")
+    n_h_hor = sum(len(s["h"]) for s in hor_hourly.values())
+    n_h_esm = sum(len(s["h"]) for s in esm_hourly.values())
+    print(f"  ✓ Hornos:    {len(hor_series)} series ({n_h_hor:,} puntos horarios)")
+    print(f"  ✓ Esmaltado: {len(esm_series)} series ({n_h_esm:,} puntos horarios)")
     print(f"  ✓ Rango: {date_min} → {date_max}")
     print(f"  ✓ JSON generado: {out_path} ({size_kb:.0f} KB)")
 
