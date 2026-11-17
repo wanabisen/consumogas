@@ -74,7 +74,17 @@ En 1-2 minutos la web estará disponible en
 
 Cada vez que tengas un Excel nuevo:
 
-### Opción A — Desde la web de GitHub (sin instalar nada)
+### Opción A — Botón «Subir Excel» del dashboard (recomendada)
+
+1. Abre el dashboard y pulsa **⬆ Subir Excel** (arriba a la derecha).
+2. Elige el Excel (el nombre del fichero da igual).
+3. La primera vez, pega un **token de GitHub** (la ventana explica cómo crearlo:
+   *fine-grained token* con acceso solo a este repositorio y permiso
+   **Contents: Read and write**). Se puede recordar en el navegador.
+4. Pulsa **Subir y actualizar**. La ventana avisa cuando el dashboard está
+   actualizado (2–4 minutos). Si el Excel es idéntico al publicado, lo indica y no hace nada.
+
+### Opción B — Desde la web de GitHub (sin instalar nada)
 
 1. Ve a tu repo en GitHub
 2. Haz clic en la carpeta `data/`
@@ -86,7 +96,7 @@ Cada vez que tengas un Excel nuevo:
 5. Haz clic en **Commit changes**
 6. GitHub Actions arrancará automáticamente (~2 min) y actualizará el dashboard
 
-### Opción B — Con Git en local
+### Opción C — Con Git en local
 
 ```bash
 cp /ruta/al/nuevo/archivo.xlsx data/P1_Control_Consumo_Gas_Energia_Por_Hora_Esmaltado_y_Hornos.xlsx

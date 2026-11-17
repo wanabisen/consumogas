@@ -88,6 +88,25 @@
   #loading.hidden { display: none; }
   #error-box { background: #fef2f2; border: 1px solid #fca5a5; color: #991b1b; border-radius: var(--radius); padding: 16px 20px; margin: 16px 24px; display: none; }
   #error-box.visible { display: block; }
+  .up-open { font-weight: 600; color: var(--blue); border-color: var(--blue); }
+  #up-dlg { margin: auto; border: 1px solid var(--border); border-radius: 10px; padding: 20px 22px; width: min(520px, calc(100vw - 32px)); box-shadow: 0 10px 30px rgba(0,0,0,.18); color: var(--text); }
+  #up-dlg::backdrop { background: rgba(26,29,46,.35); }
+  #up-dlg h2 { font-size: 16px; margin-bottom: 6px; }
+  #up-dlg .note { font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+  #up-dlg .fld { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 12px; }
+  #up-dlg .fld input { font-size: 13px; font-weight: 400; color: var(--text); padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; }
+  #up-dlg .chk { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+  #up-dlg details { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
+  #up-dlg summary { cursor: pointer; color: var(--blue); }
+  #up-dlg ol { margin: 8px 0 0 18px; display: grid; gap: 4px; }
+  #up-dlg a { color: var(--blue); }
+  #up-status { font-size: 13px; min-height: 20px; margin-bottom: 14px; }
+  #up-status.err { color: var(--red); } #up-status.ok { color: var(--green); font-weight: 600; }
+  #up-status.busy::before { content: ''; display: inline-block; width: 12px; height: 12px; margin-right: 8px; vertical-align: -1px; border: 2px solid var(--border); border-top-color: var(--blue); border-radius: 50%; animation: spin .7s linear infinite; }
+  .dlg-btns { display: flex; gap: 8px; justify-content: flex-end; align-items: center; }
+  .link-btn { margin-right: auto; background: none; border: none; color: var(--muted); font-size: 12px; text-decoration: underline; cursor: pointer; }
+  .primary-btn { padding: 7px 14px; font-size: 13px; font-weight: 600; border: none; border-radius: 6px; background: var(--blue); color: #fff; cursor: pointer; }
+  .primary-btn:disabled { opacity: .5; cursor: wait; }
   @media (max-width: 700px) {
     header { padding: 12px 16px; } header .meta { margin-left: 0; }
     .main { padding: 14px 16px; } .range-info { margin-left: 0; }
@@ -102,7 +121,34 @@
 <header>
   <h1>⚡ Dashboard Gas — Hornos y Secaderos</h1>
   <div class="meta" id="meta-info">—</div>
+  <button class="small-btn up-open" id="btn-upload">⬆ Subir Excel</button>
 </header>
+
+<dialog id="up-dlg">
+  <form method="dialog">
+    <h2>Actualizar datos</h2>
+    <p class="note">Sube el Excel exportado. Se guarda en GitHub y el dashboard se regenera solo (2–4 minutos). Puedes dejar esta ventana abierta y te avisa al terminar.</p>
+    <label class="fld">Excel (.xlsx)<input type="file" id="up-file" accept=".xlsx"></label>
+    <label class="fld">Token de GitHub<input type="password" id="up-token" autocomplete="off" spellcheck="false" placeholder="github_pat_…"></label>
+    <label class="chk"><input type="checkbox" id="up-remember" checked> Recordar el token en este navegador</label>
+    <details>
+      <summary>¿Cómo consigo el token? (solo la primera vez)</summary>
+      <ol>
+        <li>Entra en <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">GitHub → Fine-grained token</a>.</li>
+        <li>Nombre: <i>Dashboard gas</i>. Caducidad: la que quieras (p. ej. 1 año).</li>
+        <li>Repository access: <b>Only select repositories</b> → <b id="up-repo-name">consumogas</b>.</li>
+        <li>Permissions → Repository permissions → <b>Contents: Read and write</b>.</li>
+        <li><b>Generate token</b>, cópialo y pégalo aquí. Solo da acceso a este repositorio.</li>
+      </ol>
+    </details>
+    <div id="up-status" role="status"></div>
+    <div class="dlg-btns">
+      <button type="button" class="link-btn" id="up-forget">Olvidar token</button>
+      <button value="close" class="small-btn">Cerrar</button>
+      <button type="button" class="primary-btn" id="up-go">Subir y actualizar</button>
+    </div>
+  </form>
+</dialog>
 <div id="error-box"></div>
 
 <div class="main">
@@ -213,12 +259,16 @@ function fmtWhen(ms, res) {
 const fmtIsoHour = s => s ? fmtWhen(Date.parse(s + ':00Z'), 'hour') : '—';
 
 // ── Carga ────────────────────────────────────────────────────────────────────
+async function fetchData() {
+  const res = await fetch('data.json?_=' + Date.now(), { cache: 'no-store' });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const d = await res.json();
+  if (!d.meta || d.meta.version !== 2) throw new Error('data.json con formato antiguo: vuelve a ejecutar scripts/process.py');
+  return d;
+}
 async function loadData() {
   try {
-    const res = await fetch('data.json?_=' + Date.now());
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    DATA = await res.json();
-    if (!DATA.meta || DATA.meta.version !== 2) throw new Error('data.json con formato antiguo: vuelve a ejecutar scripts/process.py');
+    DATA = await fetchData();
     T0 = Date.parse(DATA.meta.t0 + ':00Z');
     S.hor.minM2 = DATA.meta.min_m2_h?.hor ?? 100;
     S.esm.minM2 = DATA.meta.min_m2_h?.esm ?? 50;
@@ -756,6 +806,134 @@ $('btn-ytight').addEventListener('click', () => {
   S[ui.sect].yMax = Math.ceil((hi + pad) * 10) / 10;
   applyY();
 });
+
+// ── Subir Excel a GitHub (API REST) ─────────────────────────────────────────
+// El repositorio se deduce de la URL de GitHub Pages: <usuario>.github.io/<repo>/
+const REPO = (() => {
+  const m = location.hostname.match(/^([^.]+)\.github\.io$/i), seg = location.pathname.split('/').filter(Boolean)[0];
+  return m && seg ? `${m[1]}/${seg}` : 'wanabisen/consumogas';
+})();
+const XLSX_PATH = 'data/P1_Control_Consumo_Gas_Energia_Por_Hora_Esmaltado_y_Hornos.xlsx';
+const WORKFLOW_FILE = '.github/workflows/update.yml';
+const TOKEN_KEY = 'consumogas.ghToken';
+const tokenStore = {
+  get() { try { return localStorage.getItem(TOKEN_KEY) || ''; } catch { return ''; } },
+  set(v) { try { localStorage.setItem(TOKEN_KEY, v); } catch { /* sin almacenamiento */ } },
+  del() { try { localStorage.removeItem(TOKEN_KEY); } catch { /* sin almacenamiento */ } },
+};
+const wait = ms => new Promise(r => setTimeout(r, ms));
+function upSay(msg, kind = 'busy') { const el = $('up-status'); el.className = kind; el.innerHTML = msg; }
+
+async function gh(path, token, opts = {}) {
+  const r = await fetch('https://api.github.com' + path, {
+    ...opts,
+    headers: { Accept: 'application/vnd.github+json', Authorization: 'Bearer ' + token, 'X-GitHub-Api-Version': '2022-11-28',
+      ...(opts.body ? { 'Content-Type': 'application/json' } : {}) },
+  });
+  if (!r.ok) {
+    let msg = ''; try { msg = (await r.json()).message || ''; } catch { /* sin cuerpo */ }
+    const e = new Error(msg || 'HTTP ' + r.status); e.status = r.status; throw e;
+  }
+  return r.status === 204 ? null : r.json();
+}
+function fileB64(file) {
+  return new Promise((res, rej) => {
+    const fr = new FileReader();
+    fr.onload = () => res(String(fr.result).split(',')[1]);
+    fr.onerror = () => rej(fr.error || new Error('No se pudo leer el fichero'));
+    fr.readAsDataURL(file);
+  });
+}
+function explain(e) {
+  if (e.status === 401) return 'El token no es válido o ha caducado. Genera uno nuevo.';
+  if (e.status === 403 || e.status === 404) return 'El token no tiene permiso para escribir en el repositorio (necesita <b>Contents: Read and write</b> sobre ' + REPO + ').';
+  if (e.status === 409 || e.status === 422) return 'El repositorio ha cambiado mientras subías el fichero. Vuelve a pulsar «Subir y actualizar».';
+  if (e instanceof TypeError) return 'No hay conexión con GitHub. Comprueba la red e inténtalo de nuevo.';
+  return e.message;
+}
+// Espera a que termine el proceso «Actualizar dashboard» lanzado por el commit
+async function waitRun(sha, token) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < 12 * 60e3) {
+    await wait(10e3);
+    // Repo público: se consulta sin token (el token solo necesita «Contents»); si falla, con token
+    const q = `/repos/${REPO}/actions/runs?head_sha=${sha}&per_page=10`;
+    let r;
+    try {
+      const a = await fetch('https://api.github.com' + q, { headers: { Accept: 'application/vnd.github+json' } });
+      if (!a.ok) throw new Error('HTTP ' + a.status);
+      r = await a.json();
+    } catch { r = await gh(q, token); }
+    const run = (r.workflow_runs || []).find(x => x.path === WORKFLOW_FILE || x.name === 'Actualizar dashboard');
+    if (!run) {
+      if (Date.now() - t0 > 3 * 60e3) throw new Error('GitHub no ha arrancado el proceso de actualización. Revisa la pestaña Actions del repositorio.');
+      continue;
+    }
+    if (run.status === 'completed') {
+      if (run.conclusion === 'success') return;
+      throw new Error(`El proceso de GitHub ha fallado (${run.conclusion}). Comprueba que el Excel tiene las hojas de siempre. <a href="${run.html_url}" target="_blank" rel="noopener">Ver detalle</a>`);
+    }
+    upSay(`Excel subido. GitHub está procesando los datos… (${Math.round((Date.now() - t0) / 1000)} s)`);
+  }
+  throw new Error('El proceso está tardando más de lo normal. Recarga la página dentro de unos minutos.');
+}
+// Espera a que GitHub Pages sirva el data.json nuevo
+async function waitPublished(prevGenerated) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < 10 * 60e3) {
+    await wait(15e3);
+    try { const d = await fetchData(); if (d.meta.generated !== prevGenerated) return d; } catch { /* aún publicando */ }
+    upSay(`Datos procesados. Publicando la web… (${Math.round((Date.now() - t0) / 1000)} s)`);
+  }
+  throw new Error('La web está tardando en publicarse. Recarga la página (Ctrl + F5) dentro de unos minutos.');
+}
+async function uploadExcel() {
+  const file = $('up-file').files[0], token = $('up-token').value.trim();
+  if (!file) return upSay('Elige el fichero Excel.', 'err');
+  if (!/\.xlsx$/i.test(file.name)) return upSay('El fichero tiene que ser un .xlsx.', 'err');
+  if (file.size < 100e3) return upSay('El fichero es demasiado pequeño para ser el Excel de consumos.', 'err');
+  if (!token) return upSay('Pega el token de GitHub.', 'err');
+  if ($('up-remember').checked) tokenStore.set(token); else tokenStore.del();
+  const btn = $('up-go'); btn.disabled = true;
+  const mb = nf(file.size / 1048576, 1);
+  try {
+    upSay('Comprobando el token…');
+    const repo = await gh(`/repos/${REPO}`, token);
+    if (repo.permissions && !repo.permissions.push) throw Object.assign(new Error(''), { status: 403 });
+    const branch = repo.default_branch;
+    upSay(`Subiendo el Excel (${mb} MB)…`);
+    const blob = await gh(`/repos/${REPO}/git/blobs`, token, { method: 'POST', body: JSON.stringify({ content: await fileB64(file), encoding: 'base64' }) });
+    const ref = await gh(`/repos/${REPO}/git/ref/heads/${branch}`, token);
+    const head = await gh(`/repos/${REPO}/git/commits/${ref.object.sha}`, token);
+    const tree = await gh(`/repos/${REPO}/git/trees`, token, { method: 'POST',
+      body: JSON.stringify({ base_tree: head.tree.sha, tree: [{ path: XLSX_PATH, mode: '100644', type: 'blob', sha: blob.sha }] }) });
+    if (tree.sha === head.tree.sha) { upSay('Este Excel es idéntico al que ya está publicado: no hay nada que actualizar.', 'ok'); return; }
+    const stamp = new Date().toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' });
+    const commit = await gh(`/repos/${REPO}/git/commits`, token, { method: 'POST',
+      body: JSON.stringify({ message: `Actualizar datos desde el dashboard (${stamp})`, tree: tree.sha, parents: [head.sha] }) });
+    await gh(`/repos/${REPO}/git/refs/heads/${branch}`, token, { method: 'PATCH', body: JSON.stringify({ sha: commit.sha }) });
+    upSay('Excel subido. GitHub está procesando los datos…');
+    await waitRun(commit.sha, token);
+    upSay('Datos procesados. Publicando la web…');
+    const fresh = await waitPublished(DATA?.meta?.generated);
+    DATA = fresh; T0 = Date.parse(DATA.meta.t0 + ':00Z');
+    setFullRange(); renderMeta(); renderSect();
+    upSay(`✓ Dashboard actualizado. Hornos hasta ${fmtIsoHour(DATA.meta.last?.hor)} · secaderos hasta ${fmtIsoHour(DATA.meta.last?.esm)}.`, 'ok');
+    $('up-file').value = '';
+  } catch (e) {
+    upSay(explain(e), 'err');
+  } finally {
+    btn.disabled = false;
+  }
+}
+$('btn-upload').addEventListener('click', () => {
+  $('up-token').value = tokenStore.get();
+  $('up-repo-name').textContent = REPO.split('/')[1];
+  if (!$('up-go').disabled) upSay('', '');
+  $('up-dlg').showModal();
+});
+$('up-go').addEventListener('click', uploadExcel);
+$('up-forget').addEventListener('click', () => { tokenStore.del(); $('up-token').value = ''; upSay('Token olvidado en este navegador.', 'ok'); });
 
 loadData();
 </script>
