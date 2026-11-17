@@ -54,6 +54,7 @@ EVENTS = [
     {"date": "2025-05-14", "sect": "esm", "label": "POPPI averiado"},
     {"date": "2026-04-16", "sect": "esm", "label": "POPPI nuevo"},
     {"date": "2026-08-25", "sect": "esm", "label": "Turbinas actuales POPPI"},
+    {"date": "2026-11-09", "sect": "esm", "label": "POPPI averiado"},
     {"date": "2026-01-01", "sect": "hor", "line": 1, "label": "Calorifugado H1"},
 ]
 
