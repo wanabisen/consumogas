@@ -3,521 +3,586 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dashboard Gas Hornos & Esmaltado</title>
+<title>Dashboard Gas Hornos y Secaderos</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
     --bg: #f5f6fa; --surface: #ffffff; --surface2: #f0f2f8;
     --border: #d4d8e8; --text: #1a1d2e; --muted: #6b7280; --hint: #9ca3af;
-    --blue: #2563eb; --green: #059669;
+    --blue: #2563eb; --green: #059669; --red: #dc2626; --amber: #d97706; --event: #7c3aed;
     --radius: 8px; --shadow: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.05);
   }
   body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5; min-height: 100vh; }
-  header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; gap: 12px; }
+  header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; gap: 8px 16px; flex-wrap: wrap; }
   header h1 { font-size: 16px; font-weight: 600; }
-  header .meta { font-size: 12px; color: var(--muted); margin-left: auto; }
-  header .meta span { font-weight: 500; color: var(--text); }
+  header .meta { font-size: 12px; color: var(--muted); margin-left: auto; display: flex; gap: 6px 14px; flex-wrap: wrap; }
+  header .meta b { font-weight: 500; color: var(--text); }
+  .stale { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; border-radius: 99px; padding: 0 8px; font-weight: 600; }
   .main { max-width: 1280px; margin: 0 auto; padding: 20px 24px; }
   .controls { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px 18px; display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 18px; }
   .ctrl { display: flex; flex-direction: column; gap: 4px; }
-  .ctrl label { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
-  .ctrl input[type=date], .ctrl select { font-size: 13px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); cursor: pointer; outline: none; }
-  .ctrl input[type=date]:focus, .ctrl select:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(37,99,235,.12); }
+  .ctrl label, .ctrl .lbl { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .ctrl input[type=date] { font-size: 13px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); outline: none; }
+  .ctrl input[type=date]:focus, input[type=number]:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(37,99,235,.12); }
   .btn-group { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
-  .btn-group button { padding: 6px 13px; font-size: 12px; font-weight: 500; border: none; background: var(--surface); color: var(--muted); cursor: pointer; border-right: 1px solid var(--border); transition: background .15s; }
+  .btn-group button { padding: 6px 13px; font-size: 12px; font-weight: 500; border: none; background: var(--surface); color: var(--muted); cursor: pointer; border-right: 1px solid var(--border); }
   .btn-group button:last-child { border-right: none; }
   .btn-group button:hover { background: var(--surface2); color: var(--text); }
   .btn-group button.active { background: var(--text); color: #fff; }
-  .btn-group button.active-mean { background: #dbeafe; color: #1d4ed8; font-weight: 600; }
-  .btn-group button.active-mode { background: #d1fae5; color: #065f46; font-weight: 600; }
+  .small-btn { padding: 6px 10px; font-size: 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); cursor: pointer; color: var(--muted); font-weight: 500; }
+  .small-btn:hover { background: var(--surface2); color: var(--text); }
   .range-info { font-size: 12px; color: var(--muted); align-self: flex-end; margin-left: auto; }
   .section-tabs { display: flex; gap: 2px; border-bottom: 2px solid var(--border); margin-bottom: 16px; }
-  .section-tab { padding: 8px 20px; font-size: 13px; font-weight: 600; border: none; background: transparent; color: var(--muted); cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -2px; transition: color .15s; }
-  .section-tab.active-hor { color: var(--blue); border-bottom-color: var(--blue); }
-  .section-tab.active-esm { color: var(--green); border-bottom-color: var(--green); }
-  .section-tab:not(.active-hor):not(.active-esm):hover { color: var(--text); }
-  .section-panel { display: none; } .section-panel.active { display: block; }
-  .stats-strip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
-  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; box-shadow: var(--shadow); }
-  .stat-card.best  { border-left: 4px solid var(--green); }
-  .stat-card.worst { border-left: 4px solid #ef4444; }
-  .stat-label { font-size: 11px; color: var(--muted); font-weight: 500; margin-bottom: 4px; text-transform: uppercase; letter-spacing: .03em; }
-  .stat-value { font-size: 22px; font-weight: 700; }
-  .stat-sub   { font-size: 11px; color: var(--muted); margin-top: 2px; }
-  .chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px 18px; }
-  .line-sel { display: flex; gap: 8px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
-  .line-sel span { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .section-tab { padding: 8px 20px; font-size: 13px; font-weight: 600; border: none; background: transparent; color: var(--muted); cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -2px; }
+  .section-tab.active { color: var(--blue); border-bottom-color: var(--blue); }
+  .section-tab:not(.active):hover { color: var(--text); }
+  .line-sel { display: flex; gap: 8px 14px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+  .line-sel > span:first-child { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .sect-note { font-size: 12px; color: var(--muted); }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px 18px; margin-bottom: 16px; }
   .fmt-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
-  .fmt-tag { padding: 4px 11px; font-size: 12px; border-radius: 99px; cursor: pointer; border: 1px solid var(--border); background: var(--surface2); color: var(--muted); transition: all .15s; font-weight: 500; }
-  .fmt-tag.on { background: var(--text); color: #fff; border-color: var(--text); }
+  .fmt-tag { padding: 4px 11px; font-size: 12px; border-radius: 99px; cursor: pointer; border: 1px solid var(--border); background: var(--surface2); color: var(--muted); font-weight: 500; }
+  .fmt-tag.on { color: #fff; }
   .fmt-tag:hover:not(.on) { border-color: var(--text); color: var(--text); }
-  .zoom-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
-  .zoom-row label { font-size: 11px; color: var(--muted); white-space: nowrap; font-weight: 500; }
-  .zoom-row input[type=range] { width: 120px; accent-color: var(--blue); }
-  .zoom-val { font-size: 12px; font-weight: 600; min-width: 34px; }
-  .zoom-btn { padding: 4px 10px; font-size: 11px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); cursor: pointer; color: var(--muted); font-weight: 500; }
-  .zoom-btn:hover { background: var(--surface2); color: var(--text); }
-  .chart-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 10px; font-size: 12px; color: var(--muted); }
-  .leg-item { display: flex; align-items: center; gap: 5px; }
-  .leg-line { width: 20px; height: 3px; border-radius: 2px; flex-shrink: 0; }
-  .leg-dashed { width: 20px; height: 0; border-top: 2px dashed currentColor; flex-shrink: 0; }
-  .leg-band { width: 14px; height: 10px; border-radius: 3px; border: 1px dashed currentColor; opacity: .6; flex-shrink: 0; }
-  .ciclo-toggle { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 99px; font-size: 12px; font-weight: 500; border: 1px solid #f59e0b; background: #fffbeb; color: #92400e; cursor: pointer; transition: all .15s; margin-bottom: 10px; }
-  .ciclo-toggle.off { background: var(--surface2); border-color: var(--border); color: var(--muted); }
-  .ciclo-toggle .dot { width: 8px; height: 8px; border-radius: 50%; background: #f59e0b; flex-shrink: 0; }
-  .ciclo-toggle.off .dot { background: var(--hint); }
-  .chart-wrap { position: relative; width: 100%; }
+  .opt-row { display: flex; align-items: center; gap: 8px 16px; margin-bottom: 10px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+  .opt-row input[type=number] { width: 64px; font-size: 12px; padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; outline: none; }
+  .opt-row input[type=range] { width: 110px; accent-color: var(--blue); }
+  .opt-row .val { font-weight: 600; color: var(--text); min-width: 34px; display: inline-block; }
+  .opt-row label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+  .opt-group { display: inline-flex; align-items: center; gap: 6px; }
+  .chart-wrap { position: relative; width: 100%; height: 360px; }
+  .empty { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; color: var(--muted); font-size: 13px; }
+  .empty.on { display: flex; }
+  #canvas { cursor: crosshair; touch-action: pan-y; }
+  .fr-btn.on-A { background: #dbeafe; color: #1d4ed8; font-weight: 600; }
+  .fr-btn.on-B { background: #fef3c7; color: #92400e; font-weight: 600; }
+  .fr-dates { display: flex; gap: 8px 24px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-bottom: 10px; align-items: center; }
+  .fr-dates > span { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .fr-dates input[type=date] { font-size: 12px; padding: 3px 6px; border: 1px solid var(--border); border-radius: 6px; color: var(--text); }
+  .fr-tag { display: inline-block; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 4px; text-align: center; font-weight: 700; font-size: 12px; line-height: 20px; color: #fff; }
+  .fr-tag.A { background: #2563eb; } .fr-tag.B { background: #d97706; }
+  table.sum th.A { color: #1d4ed8; } table.sum th.B { color: #b45309; }
+  .few { color: var(--amber); font-size: 11px; margin-left: 4px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 4px 0 10px; font-size: 12px; color: var(--muted); }
+  .leg { display: inline-flex; align-items: center; gap: 5px; }
+  .leg i { display: inline-block; width: 18px; height: 0; border-top: 3px solid; }
+  .leg i.dash { border-top: 2px dashed; }
+  .leg i.band { height: 10px; border: 1px dashed; border-radius: 2px; }
+  .leg i.evt { width: 0; height: 12px; border-top: 0; border-left: 2px dashed var(--event); }
+  table.sum { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.sum th { text-align: right; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  table.sum td { text-align: right; padding: 7px 8px; border-bottom: 1px solid var(--surface2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  table.sum th:first-child, table.sum td:first-child { text-align: left; }
+  table.sum td.k { font-weight: 700; }
+  table.sum td small { color: var(--muted); font-size: 11px; margin-left: 4px; }
+  .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+  .good { color: var(--green); } .bad { color: var(--red); }
+  .table-scroll { overflow-x: auto; }
+  .card h2 { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
+  .card .note { font-size: 12px; color: var(--muted); margin-top: 8px; }
   #loading { position: fixed; inset: 0; background: rgba(245,246,250,.9); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; z-index: 999; font-size: 14px; color: var(--muted); }
   #loading .spinner { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--blue); border-radius: 50%; animation: spin .7s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
   #loading.hidden { display: none; }
-  #error-box { background: #fef2f2; border: 1px solid #fca5a5; color: #991b1b; border-radius: var(--radius); padding: 16px 20px; margin-bottom: 16px; display: none; }
+  #error-box { background: #fef2f2; border: 1px solid #fca5a5; color: #991b1b; border-radius: var(--radius); padding: 16px 20px; margin: 16px 24px; display: none; }
   #error-box.visible { display: block; }
-  @media (max-width: 700px) { .stats-strip { grid-template-columns: 1fr 1fr; } .main { padding: 14px; } }
+  @media (max-width: 700px) {
+    header { padding: 12px 16px; } header .meta { margin-left: 0; }
+    .main { padding: 14px 16px; } .range-info { margin-left: 0; }
+    .chart-wrap { height: 300px; } .card { padding: 14px 12px; }
+  }
 </style>
 </head>
 <body>
 
 <div id="loading"><div class="spinner"></div><span>Cargando datos…</span></div>
-<div id="error-box"></div>
 
 <header>
-  <div><h1>⚡ Dashboard Gas — Hornos &amp; Esmaltado</h1></div>
+  <h1>⚡ Dashboard Gas — Hornos y Secaderos</h1>
   <div class="meta" id="meta-info">—</div>
 </header>
+<div id="error-box"></div>
 
 <div class="main">
   <div class="controls">
-    <div class="ctrl"><label>Desde</label><input type="date" id="d-from" onchange="onCtrlChange()"></div>
-    <div class="ctrl"><label>Hasta</label><input type="date" id="d-to" onchange="onCtrlChange()"></div>
+    <div class="ctrl"><label for="d-from">Desde</label><input type="date" id="d-from"></div>
+    <div class="ctrl"><label for="d-to">Hasta</label><input type="date" id="d-to"></div>
+    <div class="ctrl"><span class="lbl">&nbsp;</span><button class="small-btn" id="btn-all">Todo el periodo</button></div>
     <div class="ctrl">
-      <label>Resolución</label>
+      <span class="lbl">Resolución</span>
       <div class="btn-group" id="res-btns">
-        <button onclick="setRes('hour',this)">Horario</button>
-        <button onclick="setRes('day',this)">Diario</button>
-        <button class="active" onclick="setRes('month',this)">Mensual</button>
+        <button data-res="hour">Horario</button>
+        <button data-res="day">Diario</button>
+        <button data-res="month" class="active">Mensual</button>
       </div>
     </div>
     <div class="ctrl">
-      <label>Métrica</label>
+      <span class="lbl">Valor de cada periodo</span>
       <div class="btn-group" id="metric-btns">
-        <button id="btn-mean" class="active-mean" onclick="setMetric('mean',this)">Media</button>
-        <button id="btn-mode" onclick="setMetric('mode',this)">Moda</button>
+        <button data-metric="mean" class="active" title="Σ gas / Σ m² del periodo: cada hora pesa según los m² producidos">Media ponderada</button>
+        <button data-metric="median" title="Mediana de los valores horarios del periodo: no le afectan las horas extremas">Mediana</button>
       </div>
     </div>
     <div class="range-info" id="range-info">—</div>
   </div>
 
   <div class="section-tabs">
-    <button class="section-tab active-hor" id="tab-hor" onclick="setSect('hor',this)">🔥 Hornos</button>
-    <button class="section-tab" id="tab-esm" onclick="setSect('esm',this)">✦ Esmaltado</button>
+    <button class="section-tab active" data-sect="hor">🔥 Hornos</button>
+    <button class="section-tab" data-sect="esm">Secaderos</button>
   </div>
 
-  <div class="section-panel active" id="sp-hor">
-    <div class="line-sel">
-      <span>Línea:</span>
-      <div class="btn-group" id="hor-lbtns">
-        <button class="active" onclick="setLine('hor',1,this)">L1</button>
-        <button onclick="setLine('hor',3,this)">L3</button>
-        <button onclick="setLine('hor',0,this)">Ambas</button>
-      </div>
-    </div>
-    <div class="stats-strip" id="hor-stats"></div>
-    <div class="chart-card">
-      <div class="fmt-tags" id="hor-tags"></div>
-      <div class="zoom-row">
-        <label>Eje Y mín:</label><input type="range" id="hor-ym" min="0" max="35" step="0.5" value="0" oninput="onZoom('hor')"><span class="zoom-val" id="hor-ym-v">0</span>
-        <label>máx:</label><input type="range" id="hor-yx" min="5" max="45" step="0.5" value="35" oninput="onZoom('hor')"><span class="zoom-val" id="hor-yx-v">35</span>
-        <button class="zoom-btn" onclick="autoZ('hor')">Auto ↺</button>
-        <button class="zoom-btn" onclick="tightZ('hor')">Ajustar</button>
-      </div>
-      <div class="chart-legend" id="hor-legend"></div>
-      <div id="hor-ciclo-row" style="display:none">
-        <button class="ciclo-toggle" id="hor-ciclo-btn" onclick="toggleCiclo()">
-          <span class="dot"></span> Mostrar ciclo (min) — eje derecho
-        </button>
-      </div>
-      <div class="chart-wrap" style="height:320px"><canvas id="hor-canvas"></canvas></div>
-    </div>
+  <div class="line-sel">
+    <span>Línea:</span>
+    <div class="btn-group" id="line-btns"></div>
+    <span class="sect-note" id="sect-note"></span>
   </div>
 
-  <div class="section-panel" id="sp-esm">
-    <div class="line-sel">
-      <span>Línea:</span>
-      <div class="btn-group" id="esm-lbtns">
-        <button class="active" onclick="setLine('esm',1,this)">L1</button>
-        <button onclick="setLine('esm',2,this)">L2</button>
-        <button onclick="setLine('esm',4,this)">L4</button>
-        <button onclick="setLine('esm',5,this)">L5</button>
-        <button onclick="setLine('esm',6,this)">L6</button>
-      </div>
+  <div class="card">
+    <div class="fmt-tags" id="tags"></div>
+    <div class="opt-row">
+      <span class="opt-group">Excluir horas con menos de <input type="number" id="min-m2" min="0" step="10"> m²/h <small>(0 = sin filtro)</small></span>
+      <label><input type="checkbox" id="chk-events" checked> Eventos</label>
+      <label id="lbl-ciclo"><input type="checkbox" id="chk-ciclo" checked> Ciclo (min, eje derecho)</label>
     </div>
-    <div class="stats-strip" id="esm-stats"></div>
-    <div class="chart-card">
-      <div class="fmt-tags" id="esm-tags"></div>
-      <div class="zoom-row">
-        <label>Eje Y mín:</label><input type="range" id="esm-ym" min="0" max="15" step="0.2" value="0" oninput="onZoom('esm')"><span class="zoom-val" id="esm-ym-v">0</span>
-        <label>máx:</label><input type="range" id="esm-yx" min="1" max="20" step="0.2" value="15" oninput="onZoom('esm')"><span class="zoom-val" id="esm-yx-v">15</span>
-        <button class="zoom-btn" onclick="autoZ('esm')">Auto ↺</button>
-        <button class="zoom-btn" onclick="tightZ('esm')">Ajustar</button>
-      </div>
-      <div class="chart-legend" id="esm-legend"></div>
-      <div class="chart-wrap" style="height:320px"><canvas id="esm-canvas"></canvas></div>
+    <div class="opt-row">
+      <span class="opt-group">Eje Y mín <input type="range" id="y-min"><span class="val" id="y-min-v">auto</span></span>
+      <span class="opt-group">máx <input type="range" id="y-max"><span class="val" id="y-max-v">auto</span></span>
+      <button class="small-btn" id="btn-yauto">Auto</button>
+      <button class="small-btn" id="btn-ytight">Ajustar</button>
     </div>
+    <div class="opt-row">
+      <span>Franjas a comparar:</span>
+      <div class="btn-group" id="fr-btns"><button data-fr="A" class="fr-btn">Marcar A</button><button data-fr="B" class="fr-btn">Marcar B</button></div>
+      <button class="small-btn" id="fr-clear">Borrar franjas</button>
+      <span>Arrastra sobre el gráfico con el botón izquierdo pulsado.</span>
+    </div>
+    <div class="legend" id="legend"></div>
+    <div class="chart-wrap"><canvas id="canvas"></canvas><div class="empty" id="empty">Sin datos para esta selección: prueba otro rango, otro formato o baja el filtro de m²/h.</div></div>
+  </div>
+
+  <div class="card">
+    <h2 id="cmp-title">Comparación de franjas</h2>
+    <div class="fr-dates">
+      <span><span class="fr-tag A">A</span><input type="date" id="fA-from" aria-label="Franja A desde"> → <input type="date" id="fA-to" aria-label="Franja A hasta"><small id="fA-info"></small></span>
+      <span><span class="fr-tag B">B</span><input type="date" id="fB-from" aria-label="Franja B desde"> → <input type="date" id="fB-to" aria-label="Franja B hasta"><small id="fB-info"></small></span>
+    </div>
+    <div class="table-scroll"><table class="sum" id="cmp"></table></div>
+    <p class="note" id="cmp-note"></p>
+  </div>
+
+  <div class="card">
+    <h2 id="sum-title">Resumen del periodo</h2>
+    <div class="table-scroll"><table class="sum" id="sum"></table></div>
+    <p class="note" id="sum-note"></p>
   </div>
 </div>
 
 <script>
-let DATA = null;
-let metric = 'mean';
-let resolution = 'month';
-let showCiclo = true;
-const S = {
-  hor: { line: 1, yMin: 0, yMax: 35, chart: null, active: null },
-  esm: { line: 1, yMin: 0, yMax: 15, chart: null, active: null },
+'use strict';
+const MON = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+const PAL = ['#2563eb','#059669','#dc2626','#7c3aed','#d97706','#db2777','#0891b2','#65a30d','#9333ea','#0369a1','#b45309','#be123c'];
+const H = 3600e3, D = 24 * H;
+const SECT = {
+  hor: { name: 'Hornos', lines: [1, 3], both: true, dec: 1, yTop: 100, yStep: 0.5 },
+  esm: { name: 'Secaderos', lines: [1, 2, 4, 5, 6], both: false, dec: 2, yTop: 20, yStep: 0.1 },
 };
-const PAL = ['#2563eb','#059669','#dc2626','#7c3aed','#d97706','#db2777','#16a34a','#0891b2','#ca8a04','#9333ea','#0369a1','#b45309'];
 
+let DATA = null, T0 = 0, chart = null;
+const ui = { sect: 'hor', res: 'month', metric: 'mean', events: true, ciclo: true, savedRange: null, frNext: 'A' };
+const S = {
+  hor: { line: 1, active: null, minM2: 100, yMin: null, yMax: null, fr: { A: null, B: null } },
+  esm: { line: 1, active: null, minM2: 50, yMin: null, yMax: null, fr: { A: null, B: null } },
+};
+const FR_COL = { A: { fill: 'rgba(37,99,235,.10)', line: '#2563eb' }, B: { fill: 'rgba(217,119,6,.13)', line: '#d97706' } };
+let drag = null;
+const $ = id => document.getElementById(id);
+
+// ── Formato de números y fechas ────────────────────────────────────────────
+const nf = (v, d) => v == null || isNaN(v) ? '—' : v.toLocaleString('es-ES', { minimumFractionDigits: d, maximumFractionDigits: d });
+const nInt = v => String(Math.round(v)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+const iso = ms => new Date(ms).toISOString().slice(0, 10);
+const dt = ms => new Date(ms);
+function fmtWhen(ms, res) {
+  const d = dt(ms), dd = d.getUTCDate(), mm = MON[d.getUTCMonth()], yy = String(d.getUTCFullYear()).slice(2);
+  if (res === 'month') return `${mm}-${yy}`;
+  if (res === 'day') return `${dd} ${mm} ${yy}`;
+  return `${dd} ${mm} ${String(d.getUTCHours()).padStart(2, '0')}h`;
+}
+const fmtIsoHour = s => s ? fmtWhen(Date.parse(s + ':00Z'), 'hour') : '—';
+
+// ── Carga ────────────────────────────────────────────────────────────────────
 async function loadData() {
   try {
     const res = await fetch('data.json?_=' + Date.now());
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     DATA = await res.json();
-    document.getElementById('d-from').value = DATA.meta.date_min;
-    document.getElementById('d-to').value   = DATA.meta.date_max;
-    document.getElementById('meta-info').innerHTML =
-      `Datos: <span>${DATA.meta.date_min}</span> → <span>${DATA.meta.date_max}</span>
-       &nbsp;·&nbsp; Generado: <span>${DATA.meta.generated.slice(0,16).replace('T',' ')}</span>
-       &nbsp;·&nbsp; Fuente: <span>${DATA.meta.source}</span>`;
-    updateRange();
-    document.getElementById('loading').classList.add('hidden');
-    initSect('hor');
+    if (!DATA.meta || DATA.meta.version !== 2) throw new Error('data.json con formato antiguo: vuelve a ejecutar scripts/process.py');
+    T0 = Date.parse(DATA.meta.t0 + ':00Z');
+    S.hor.minM2 = DATA.meta.min_m2_h?.hor ?? 100;
+    S.esm.minM2 = DATA.meta.min_m2_h?.esm ?? 50;
+    setFullRange();
+    renderMeta();
+    $('loading').classList.add('hidden');
+    renderSect();
   } catch (e) {
-    document.getElementById('loading').classList.add('hidden');
-    const eb = document.getElementById('error-box');
-    eb.textContent = `Error cargando data.json: ${e.message}. Asegúrate de haber ejecutado scripts/process.py.`;
+    $('loading').classList.add('hidden');
+    const eb = $('error-box');
+    eb.textContent = `Error cargando los datos: ${e.message}`;
     eb.classList.add('visible');
   }
 }
 
-function getFormats(sect) {
-  if (!DATA) return [];
-  const src = DATA[sect];
+function renderMeta() {
+  const m = DATA.meta, lh = m.last?.hor, le = m.last?.esm;
+  const parts = [`Hornos hasta <b>${fmtIsoHour(lh)}</b>`, `Secaderos hasta <b>${fmtIsoHour(le)}</b>`];
+  if (lh && le) {
+    const gap = Math.abs(Date.parse(lh + ':00Z') - Date.parse(le + ':00Z')) / D;
+    if (gap > 2) parts.push(`<span class="stale" title="Una de las hojas del Excel no está actualizada">⚠ ${lh > le ? 'Secaderos' : 'Hornos'} con ${Math.round(gap)} días de retraso</span>`);
+  }
+  parts.push(`Generado <b>${m.generated.slice(0, 16).replace('T', ' ')}</b>`);
+  $('meta-info').innerHTML = parts.join('');
+}
+
+// ── Rango de fechas ──────────────────────────────────────────────────────────
+function setFullRange() { $('d-from').value = DATA.meta.date_min; $('d-to').value = DATA.meta.date_max; }
+function rangeMs() {
+  const f = Date.parse($('d-from').value + 'T00:00:00Z'), t = Date.parse($('d-to').value + 'T00:00:00Z') + D;
+  return [isNaN(f) ? -Infinity : f, isNaN(t) ? Infinity : t];
+}
+function lastDateOf(sect) {
+  let mx = -Infinity;
+  Object.values(DATA[sect]).forEach(s => { if (s.t.length) mx = Math.max(mx, s.t[s.t.length - 1]); });
+  return iso(T0 + mx * H);
+}
+function updateRangeInfo() {
+  const [f, t] = rangeMs();
+  const days = Math.round((t - f) / D);
+  let info = `${days} días`;
+  if (ui.res === 'hour' && days > 31) info += ' · ⚠ rango amplio en horario';
+  $('range-info').textContent = info;
+}
+
+// ── Datos: horas filtradas y agregación ponderada ───────────────────────────
+function keysFor(sect, fe) {
   const l = S[sect].line;
-  if (sect === 'hor' && l === 0) {
-    return [...new Set(Object.keys(src).map(k => k.split('|')[1]))];
-  }
-  return Object.keys(src).filter(k => k.startsWith(l + '|')).map(k => k.split('|')[1]);
+  return (sect === 'hor' && l === 0) ? ['1|' + fe, '3|' + fe] : [l + '|' + fe];
 }
-
-function getRaw(sect, fe) {
-  if (!DATA) return null;
-  // En horario tomamos los datos sin agregar; en otras resoluciones, los diarios.
-  if (resolution === 'hour') {
-    const src = DATA[sect + '_h']; // hor_h / esm_h
-    if (!src) return null;
-    const l = S[sect].line;
-    if (sect === 'hor' && l === 0) {
-      // Para "Ambas líneas" en hornos, mezclar los timestamps de L1 y L3
-      const s1 = src['1|' + fe], s3 = src['3|' + fe];
-      if (!s1 && !s3) return null;
-      const items = [];
-      if (s1) s1.h.forEach((h, i) => items.push({ h, g: s1.g[i], c: s1.c?.[i] ?? null }));
-      if (s3) s3.h.forEach((h, i) => items.push({ h, g: s3.g[i], c: s3.c?.[i] ?? null }));
-      items.sort((a, b) => a.h.localeCompare(b.h));
-      return {
-        h: items.map(x => x.h),
-        g: items.map(x => x.g),
-        c: items.map(x => x.c),
-        _hourly: true,
-      };
+function formats(sect) {
+  const l = S[sect].line, seen = new Map();
+  Object.entries(DATA[sect]).forEach(([k, s]) => {
+    const [kl, fe] = [Number(k.split('|')[0]), k.slice(k.indexOf('|') + 1)];
+    if (l !== 0 && kl !== l) return;
+    const m2 = s.m.reduce((a, b) => a + b, 0);
+    seen.set(fe, (seen.get(fe) || 0) + m2);
+  });
+  return [...seen.entries()].sort((a, b) => b[1] - a[1]).map(e => e[0]);
+}
+// Horas válidas en rango; en "Ambas" suma L1 + L3 de la misma hora (Σgas/Σm²)
+function hours(sect, fe, range) {
+  const [f, t] = range || rangeMs(), minM2 = S[sect].minM2, byT = new Map();
+  keysFor(sect, fe).forEach(k => {
+    const s = DATA[sect][k];
+    if (!s) return;
+    for (let i = 0; i < s.t.length; i++) {
+      const ms = T0 + s.t[i] * H;
+      if (ms < f || ms >= t || s.m[i] < minM2) continue;
+      const gas = s.g[i] * s.m[i], c = s.c ? s.c[i] : null, r = byT.get(ms);
+      if (r) { r.gas += gas; r.m += s.m[i]; if (c != null) r.cs.push(c); }
+      else byT.set(ms, { ms, gas, m: s.m[i], cs: c != null ? [c] : [] });
     }
-    const s = src[l + '|' + fe];
-    if (!s) return null;
-    return { h: s.h, g: s.g, c: s.c, _hourly: true };
-  }
-
-  // Resolución diaria/mensual: dataset agregado por día
-  const src = DATA[sect];
-  const l = S[sect].line;
-  if (sect === 'hor' && l === 0) {
-    const s1 = src['1|' + fe], s3 = src['3|' + fe];
-    if (s1 && s3) {
-      const map = {};
-      s1.d.forEach((d, i) => { map[d] = { g1: s1.g[i], c1: s1.c?.[i] ?? null }; });
-      s3.d.forEach((d, i) => {
-        if (map[d]) { map[d].g3 = s3.g[i]; map[d].c3 = s3.c?.[i] ?? null; }
-        else map[d] = { g3: s3.g[i], c3: s3.c?.[i] ?? null };
-      });
-      const days = Object.keys(map).sort();
-      const g = days.map(d => {
-        const v = map[d];
-        if (v.g1 != null && v.g3 != null) return Math.round(((v.g1 + v.g3) / 2) * 100) / 100;
-        return v.g1 ?? v.g3;
-      });
-      const c = days.map(d => {
-        const v = map[d];
-        const cv = [v.c1, v.c3].filter(x => x != null);
-        if (!cv.length) return null;
-        return Math.round(cv.reduce((a, b) => a + b, 0) / cv.length);
-      });
-      return { d: days, g, c };
-    }
-    return s1 || s3 || null;
-  }
-  return src[l + '|' + fe] || null;
-}
-
-function aggregateCiclo(raw) {
-  if (!raw?.c) return [];
-
-  if (raw._hourly) {
-    const filt = raw.h
-      .map((h, i) => ({ h, c: raw.c[i] }))
-      .filter(r => r.c != null && inRange(r.h.slice(0, 10)));
-    if (!filt.length) return [];
-    return filt.map(r => ({
-      sortKey: r.h,
-      label: hourLabel(r.h),
-      value: Math.round(r.c),
-    }));
-  }
-
-  const filt = raw.d.map((d, i) => ({ d, c: raw.c[i] })).filter(r => r.c != null && inRange(r.d));
-  if (!filt.length) return [];
-  if (resolution === 'day') return filt.map(r => ({ sortKey: r.d, label: r.d, value: r.c }));
-  const buckets = {};
-  filt.forEach(r => {
-    const key = r.d.slice(0, 7);
-    if (!buckets[key]) buckets[key] = [];
-    buckets[key].push(r.c);
   });
-  const MONTHS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-  return Object.entries(buckets).sort(([a], [b]) => a.localeCompare(b)).map(([key, vals]) => {
-    const sorted = [...vals].sort((a, b) => a - b);
-    const value = Math.round(sorted[Math.floor(sorted.length / 2)]);
-    const [y, m] = key.split('-');
-    return { sortKey: key, label: MONTHS[parseInt(m) - 1] + '-' + y.slice(2), value };
+  return [...byT.values()].sort((a, b) => a.ms - b.ms);
+}
+function bucketOf(ms) {
+  if (ui.res === 'hour') return ms;
+  const d = dt(ms);
+  return ui.res === 'day' ? Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+                          : Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1);
+}
+function median(a) {
+  if (!a.length) return null;
+  const s = [...a].sort((x, y) => x - y), i = (s.length - 1) / 2;
+  return (s[Math.floor(i)] + s[Math.ceil(i)]) / 2;
+}
+function quant(a, p) {
+  const s = [...a].sort((x, y) => x - y), i = p * (s.length - 1), lo = Math.floor(i), hi = Math.ceil(i);
+  return s[lo] + (s[hi] - s[lo]) * (i - lo);
+}
+function aggregate(hrs) {
+  const b = new Map();
+  hrs.forEach(r => {
+    const k = bucketOf(r.ms);
+    let x = b.get(k);
+    if (!x) { x = { x: k, gas: 0, m: 0, n: 0, g: [], cs: [] }; b.set(k, x); }
+    x.gas += r.gas; x.m += r.m; x.n++; x.g.push(r.gas / r.m); x.cs.push(...r.cs);
   });
-}
-
-function inRange(d) {
-  const from = document.getElementById('d-from').value;
-  const to   = document.getElementById('d-to').value;
-  return d >= from && d <= to;
-}
-
-function aggregate(raw) {
-  if (!raw) return [];
-
-  // Datos horarios: timestamp ISO "YYYY-MM-DDTHH:MM"
-  if (raw._hourly) {
-    const filt = raw.h
-      .map((h, i) => ({ h, g: raw.g[i] }))
-      .filter(r => r.g != null && inRange(r.h.slice(0, 10)));
-    if (!filt.length) return [];
-    // En resolución horaria, cada punto es un punto en el gráfico
-    return filt.map(r => ({
-      sortKey: r.h,
-      label: hourLabel(r.h),
-      value: Math.round(r.g * 100) / 100,
-    }));
-  }
-
-  // Datos diarios (resolución diaria o mensual)
-  const filt = raw.d.map((d, i) => ({ d, g: raw.g[i] })).filter(r => r.g != null && inRange(r.d));
-  if (!filt.length) return [];
-  if (resolution === 'day') return filt.map(r => ({ sortKey: r.d, label: r.d, value: r.g }));
-  const buckets = {};
-  filt.forEach(r => {
-    const key = r.d.slice(0, 7);
-    if (!buckets[key]) buckets[key] = [];
-    buckets[key].push(r.g);
-  });
-  const MONTHS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-  return Object.entries(buckets).sort(([a], [b]) => a.localeCompare(b)).map(([key, vals]) => {
-    const sorted = [...vals].sort((a, b) => a - b);
-    let value;
-    if (metric === 'mean') {
-      value = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length * 10) / 10;
-    } else {
-      const p25i = Math.floor(sorted.length * 0.25);
-      const p75i = Math.ceil(sorted.length * 0.75);
-      const mid  = sorted.slice(p25i, p75i);
-      value = mid.length ? Math.round(mid.reduce((a, b) => a + b, 0) / mid.length * 10) / 10
-                          : Math.round(vals[Math.floor(vals.length / 2)] * 10) / 10;
-    }
-    const [y, m] = key.split('-');
-    return { sortKey: key, label: MONTHS[parseInt(m) - 1] + '-' + y.slice(2), value };
-  });
-}
-
-// Formato corto para etiqueta horaria: "12 may 14h"
-function hourLabel(iso) {
-  const MONTHS_S = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
-  const [date, time] = iso.split('T');
-  const [, m, d] = date.split('-');
-  const hh = time.split(':')[0];
-  return `${parseInt(d)} ${MONTHS_S[parseInt(m)-1]} ${hh}h`;
-}
-
-function pct(arr, p) {
-  const s = [...arr].sort((a, b) => a - b);
-  const i = (p / 100) * (s.length - 1);
-  const lo = Math.floor(i), hi = Math.ceil(i);
-  return Math.round((s[lo] + (s[hi] - s[lo]) * (i - lo)) * 10) / 10;
-}
-function calcStats(vals) {
-  const v = vals.filter(x => x != null);
-  if (!v.length) return null;
-  return { mean: Math.round(v.reduce((a, b) => a + b, 0) / v.length * 10) / 10,
-    p25: pct(v, 25), p50: pct(v, 50), p75: pct(v, 75),
-    min: Math.min(...v), max: Math.max(...v),
-    minI: v.indexOf(Math.min(...v)), maxI: v.lastIndexOf(Math.max(...v)) };
-}
-
-function mLbl() { return metric === 'mean' ? 'Media' : 'Moda'; }
-function mClr() { return metric === 'mean' ? '#2563eb' : '#059669'; }
-
-function renderStats(sect) {
-  const allVals = [];
-  (S[sect].active || []).forEach(fe => { aggregate(getRaw(sect, fe)).forEach(r => allVals.push(r.value)); });
-  const st = calcStats(allVals);
-  const el = document.getElementById(sect + '-stats');
-  if (!st) { el.innerHTML = ''; return; }
-  el.innerHTML = `
-    <div class="stat-card"><div class="stat-label">${mLbl()} global</div><div class="stat-value" style="color:${mClr()}">${st.mean}</div><div class="stat-sub">kWht/m²</div></div>
-    <div class="stat-card">
-      <div class="stat-label">Rango normal · P25 – <b>P50</b> – P75</div>
-      <div class="stat-value">${st.p25} · <span style="color:var(--blue)">${st.p50}</span> · ${st.p75}</div>
-      <div class="stat-sub">mediana resaltada</div>
-    </div>
-    <div class="stat-card best"><div class="stat-label">Mejor período</div><div class="stat-value" style="color:var(--green)">${st.min}</div><div class="stat-sub">mínimo kWht/m²</div></div>
-    <div class="stat-card worst"><div class="stat-label">Peor período</div><div class="stat-value" style="color:#ef4444">${st.max}</div><div class="stat-sub">máximo kWht/m²</div></div>`;
-}
-
-function buildTags(sect) {
-  const fmts = getFormats(sect);
-  if (!S[sect].active || !S[sect].active.some(f => fmts.includes(f))) {
-    S[sect].active = fmts.slice(0, Math.min(4, fmts.length));
-  }
-  document.getElementById(sect + '-tags').innerHTML = fmts.map(fe =>
-    `<button class="fmt-tag${S[sect].active.includes(fe) ? ' on' : ''}" onclick="toggleFE('${sect}','${fe}',this)">${fe}</button>`
-  ).join('');
-}
-
-function toggleFE(sect, fe, btn) {
-  const active = S[sect].active;
-  if (active.includes(fe)) {
-    if (active.length === 1) return;
-    S[sect].active = active.filter(f => f !== fe);
-    btn.classList.remove('on');
-  } else {
-    S[sect].active.push(fe);
-    btn.classList.add('on');
-  }
-  drawChart(sect);
-}
-
-function drawChart(sect) {
-  renderStats(sect);
-  const s = S[sect];
-  const series = [];
-  (s.active || []).forEach((fe, i) => {
-    const raw = getRaw(sect, fe);
-    const agg = aggregate(raw);
-    if (!agg.length) return;
-    series.push({ fe, agg, raw, color: PAL[i % PAL.length] });
-  });
-
-  const keySet = new Set();
-  const keyToLabel = {};
-  series.forEach(({ agg }) => agg.forEach(r => {
-    keySet.add(r.sortKey);
-    keyToLabel[r.sortKey] = r.label;
+  return [...b.values()].sort((a, c) => a.x - c.x).map(x => ({
+    x: x.x, m: x.m, n: x.n,
+    y: ui.metric === 'mean' ? x.gas / x.m : median(x.g),
+    c: x.cs.length ? Math.round(median(x.cs)) : null,
   }));
-  const sortedKeys = [...keySet].sort();
-  const labels = sortedKeys.map(k => keyToLabel[k] ?? k);
+}
 
-  const datasets = [];
-  const firstAgg = series[0]?.agg || [];
-  const fst = calcStats(firstAgg.map(r => r.value));
-  const bandColor = metric === 'mean' ? 'rgba(37,99,235,.07)' : 'rgba(5,150,105,.07)';
-  if (fst && firstAgg.length > 2) {
-    datasets.push({ label: '_bt', data: labels.map(() => fst.p75), borderWidth: 0, pointRadius: 0, fill: '+1', backgroundColor: bandColor, tension: 0, spanGaps: true, yAxisID: 'y' });
-    datasets.push({ label: '_bb', data: labels.map(() => fst.p25), borderWidth: 0, pointRadius: 0, fill: false, tension: 0, spanGaps: true, yAxisID: 'y' });
-  }
+// ── Eventos (plugin de Chart.js) ─────────────────────────────────────────────
+function eventsFor(sect) {
+  if (!ui.events) return [];
+  const l = S[sect].line;
+  return (DATA.meta.events || [])
+    .filter(e => e.sect === sect && (e.line == null || l === 0 || e.line === l))
+    .map(e => ({ ms: Date.parse(e.date + 'T00:00:00Z'), label: e.label }));
+}
+const eventsPlugin = {
+  id: 'events',
+  afterDatasetsDraw(c, _a, opts) {
+    const items = opts.items || [];
+    if (!items.length) return;
+    const { ctx, chartArea: a, scales: { x } } = c;
+    ctx.save();
+    ctx.font = '600 11px system-ui, sans-serif';
+    let lastRight = -Infinity, row = 0;
+    items.forEach(ev => {
+      const px = x.getPixelForValue(ev.ms);
+      if (px < a.left || px > a.right) return;
+      ctx.strokeStyle = '#7c3aed'; ctx.lineWidth = 1.5; ctx.setLineDash([5, 4]);
+      ctx.beginPath(); ctx.moveTo(px, a.top); ctx.lineTo(px, a.bottom); ctx.stroke();
+      const w = ctx.measureText(ev.label).width + 8;
+      const left = px + w + 4 > a.right ? px - w - 4 : px + 4;
+      row = left < lastRight ? row + 1 : 0;
+      lastRight = left + w;
+      const y = a.top + 4 + row * 18;
+      ctx.setLineDash([]); ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.fillRect(left, y, w, 16);
+      ctx.fillStyle = '#6d28d9'; ctx.fillText(ev.label, left + 4, y + 12);
+    });
+    ctx.restore();
+  },
+};
 
-  series.forEach(({ fe, agg, color }) => {
-    const map = {};
-    agg.forEach(r => map[r.sortKey ?? r.label] = r.value);
-    const vals = sortedKeys.map(k => map[k] ?? null);
-    const st = calcStats(vals);
-    const ptBg = vals.map((v, j) => j === st?.minI ? '#059669' : j === st?.maxI ? '#dc2626' : color);
-    const baseR = resolution === 'hour' ? 0 : 3;   // sin puntos en horario salvo mejor/peor
-    const ptR = vals.map((v, j) => (j === st?.minI || j === st?.maxI) ? 7 : v != null ? baseR : 0);
-    const ptS = vals.map((v, j) => j === st?.minI ? 'triangle' : j === st?.maxI ? 'triangle' : 'circle');
-    datasets.push({ label: fe, data: vals, borderColor: color, borderWidth: resolution === 'hour' ? 1.5 : 2.5, pointRadius: ptR, pointBackgroundColor: ptBg, pointStyle: ptS, tension: resolution === 'month' ? 0.3 : 0.1, spanGaps: true, fill: false, yAxisID: 'y' });
+// ── Franjas A/B (plugin + selección con el ratón) ───────────────────────────
+const franjasPlugin = {
+  id: 'franjas',
+  beforeDatasetsDraw(c) {
+    const { ctx, chartArea: a, scales: { x } } = c;
+    const box = (x0, x1, col, lbl) => {
+      const p0 = Math.max(a.left, Math.min(x0, x1)), p1 = Math.min(a.right, Math.max(x0, x1));
+      if (p1 <= p0) return;
+      ctx.fillStyle = col.fill; ctx.fillRect(p0, a.top, p1 - p0, a.bottom - a.top);
+      ctx.strokeStyle = col.line; ctx.lineWidth = 1; ctx.setLineDash([]);
+      ctx.beginPath(); ctx.moveTo(p0, a.top); ctx.lineTo(p0, a.bottom); ctx.moveTo(p1, a.top); ctx.lineTo(p1, a.bottom); ctx.stroke();
+      ctx.fillStyle = col.line; ctx.font = '700 13px system-ui, sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText(lbl, (p0 + p1) / 2, a.bottom - 8);
+    };
+    ctx.save();
+    const fr = S[ui.sect].fr;
+    ['A', 'B'].forEach(k => { if (fr[k]) box(x.getPixelForValue(fr[k][0]), x.getPixelForValue(fr[k][1]), FR_COL[k], k); });
+    if (drag) box(drag.x0, drag.x1, FR_COL[ui.frNext], ui.frNext);
+    ctx.restore();
+  },
+};
+// Ajusta la franja a periodos completos de la resolución actual
+function nextBucket(ms) {
+  if (ui.res === 'hour') return ms + H;
+  if (ui.res === 'day') return ms + D;
+  const d = dt(ms); return Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1);
+}
+function nearestBucket(ms) { const b = bucketOf(ms), n = nextBucket(b); return ms - b <= n - ms ? b : n; }
+function snapRange(a, b) {
+  const s = nearestBucket(Math.min(a, b));
+  let e = nextBucket(nearestBucket(Math.max(a, b)));
+  if (e <= s) e = nextBucket(s);
+  return [s, e];
+}
+function frLen(r) {
+  const h = (r[1] - r[0]) / H;
+  return h < 48 ? `${Math.round(h)} h` : `${Math.round(h / 24)} días`;
+}
+function syncFrUI() {
+  document.querySelectorAll('#fr-btns button').forEach(b => { b.className = 'fr-btn' + (b.dataset.fr === ui.frNext ? ' on-' + ui.frNext : ''); });
+  const fr = S[ui.sect].fr;
+  ['A', 'B'].forEach(k => {
+    const r = fr[k];
+    $(`f${k}-from`).value = r ? iso(r[0]) : '';
+    $(`f${k}-to`).value = r ? iso(r[1] - 1) : '';
+    $(`f${k}-info`).textContent = r ? frLen(r) : 'sin marcar';
   });
+}
+function frStat(sect, fe, r) {
+  if (!r) return null;
+  const h = hours(sect, fe, r);
+  if (!h.length) return { n: 0 };
+  const gas = h.reduce((a, x) => a + x.gas, 0), m = h.reduce((a, x) => a + x.m, 0), cs = h.flatMap(x => x.cs);
+  return { n: h.length, m, ce: gas / m, ci: cs.length ? cs.reduce((a, b) => a + b, 0) / cs.length : null };
+}
+function renderCompare() {
+  const sect = ui.sect, cfg = SECT[sect], fr = S[sect].fr, d = cfg.dec;
+  const lineTxt = S[sect].line === 0 ? 'L1 + L3' : 'L' + S[sect].line;
+  $('cmp-title').textContent = `Comparación de franjas · ${cfg.name} ${lineTxt}`;
+  syncFrUI();
+  if (!fr.A && !fr.B) {
+    $('cmp').innerHTML = '';
+    $('cmp-note').textContent = 'Arrastra sobre el gráfico con el botón izquierdo pulsado para marcar la franja A; después, la B. También puedes escribir las fechas.';
+    return;
+  }
+  const ciclo = sect === 'hor' && DATA.meta.has_ciclo;
+  const v = (st, f) => !st ? '—' : st.n === 0 ? '<small>sin datos</small>' : f(st);
+  const pctDiff = (a, b) => {
+    if (!a?.n || !b?.n) return '<td>—</td>';
+    const p = (b.ce - a.ce) / a.ce * 100;
+    return `<td class="k ${p < 0 ? 'good' : p > 0 ? 'bad' : ''}">${p > 0 ? '+' : ''}${nf(p, 1)} %</td>`;
+  };
+  const ciDiff = (a, b) => {
+    if (a?.ci == null || b?.ci == null) return '—';
+    const x = Math.round((b.ci - a.ci) * 10) / 10;
+    return `${x > 0 ? '+' : ''}${nf(x === 0 ? 0 : x, 1)}`;
+  };
+  const few = st => st?.n && st.n < 24 ? '<span class="few" title="Menos de 24 horas: resultado poco fiable">⚠</span>' : '';
+  const active = S[sect].active || [];
+  const rows = active.map((fe, i) => {
+    const a = frStat(sect, fe, fr.A), b = frStat(sect, fe, fr.B);
+    return `<tr><td><span class="sw" style="background:${PAL[i % PAL.length]}"></span>${fe}</td>
+      <td>${v(a, s => nf(s.ce, d))}</td><td>${v(b, s => nf(s.ce, d))}</td>${pctDiff(a, b)}
+      ${ciclo ? `<td>${v(a, s => s.ci == null ? '—' : nf(s.ci, 1))}</td><td>${v(b, s => s.ci == null ? '—' : nf(s.ci, 1))}</td><td>${ciDiff(a, b)}</td>` : ''}
+      <td>${v(a, s => nInt(s.m))}</td><td>${v(b, s => nInt(s.m))}</td>
+      <td>${a?.n ?? '—'}${few(a)} · ${b?.n ?? '—'}${few(b)}</td></tr>`;
+  });
+  $('cmp').innerHTML = `<thead><tr><th>Formato</th><th class="A">Consumo A<br>kWht/m²</th><th class="B">Consumo B<br>kWht/m²</th><th>B frente a A</th>
+    ${ciclo ? '<th class="A">Ciclo A<br>min</th><th class="B">Ciclo B<br>min</th><th>Dif. ciclo<br>min</th>' : ''}
+    <th class="A">m² A</th><th class="B">m² B</th><th>Horas<br>A · B</th></tr></thead><tbody>${rows.join('')}</tbody>`;
+  $('cmp-note').textContent = `Consumo medio = Σ gas / Σ m² de las horas de cada franja; ciclo medio = media de las horas con ciclo. `
+    + `Mismo filtro de producción que el gráfico (mín. ${S[sect].minM2} m²/h). Verde: B consume menos que A. ⚠ = menos de 24 horas.`;
+}
 
-  const hasCiclo = sect === 'hor' && DATA?.meta?.has_ciclo && showCiclo && series.length > 0;
-  const cicloDatasets = [];
-  if (hasCiclo) {
-    series.forEach(({ fe, raw, color }) => {
-      const cicloAgg = aggregateCiclo(raw);
-      if (!cicloAgg.length) return;
-      const map = {};
-      cicloAgg.forEach(r => map[r.sortKey ?? r.label] = r.value);
-      const vals = sortedKeys.map(k => map[k] ?? null);
-      cicloDatasets.push({ fe, vals, color });
-      datasets.push({
-        label: `ciclo|${fe}`, data: vals,
-        borderColor: color, borderWidth: 1.5, borderDash: [5, 3],
-        pointRadius: vals.map(v => v != null ? 2 : 0),
-        pointBackgroundColor: color, tension: resolution === 'month' ? 0.3 : 0.1,
-        spanGaps: true, fill: false, yAxisID: 'y2',
-      });
+const cv = $('canvas');
+const pxOf = e => e.clientX - cv.getBoundingClientRect().left;
+cv.addEventListener('pointerdown', e => {
+  if (e.button !== 0 || !chart) return;
+  const a = chart.chartArea, px = pxOf(e);
+  if (px < a.left || px > a.right) return;
+  drag = { x0: px, x1: px };
+  cv.setPointerCapture(e.pointerId);
+});
+cv.addEventListener('pointermove', e => {
+  if (!drag) return;
+  const a = chart.chartArea;
+  drag.x1 = Math.max(a.left, Math.min(a.right, pxOf(e)));
+  chart.draw();
+});
+cv.addEventListener('pointerup', () => {
+  if (!drag) return;
+  const dd = drag; drag = null;
+  if (Math.abs(dd.x1 - dd.x0) < 5) { chart.draw(); return; }
+  const x = chart.scales.x, k = ui.frNext;
+  S[ui.sect].fr[k] = snapRange(x.getValueForPixel(dd.x0), x.getValueForPixel(dd.x1));
+  ui.frNext = k === 'A' ? 'B' : 'A';
+  chart.draw(); renderCompare();
+});
+cv.addEventListener('pointercancel', () => { drag = null; if (chart) chart.draw(); });
+
+// ── Render ───────────────────────────────────────────────────────────────────
+function renderSect() {
+  const sect = ui.sect, cfg = SECT[sect];
+  document.querySelectorAll('.section-tab').forEach(b => b.classList.toggle('active', b.dataset.sect === sect));
+  const lines = cfg.lines.map(l => ({ l, t: 'L' + l })).concat(cfg.both ? [{ l: 0, t: 'Ambas' }] : []);
+  $('line-btns').innerHTML = lines.map(o => `<button data-line="${o.l}" class="${o.l === S[sect].line ? 'active' : ''}">${o.t}</button>`).join('');
+  $('sect-note').textContent = sect === 'esm'
+    ? 'Gas de los secaderos (registrado en la hoja de esmaltado).'
+    : (S.hor.line === 0 ? 'Ambas: L1 + L3 sumados hora a hora (Σgas / Σm²).' : '');
+  $('min-m2').value = S[sect].minM2;
+  $('lbl-ciclo').style.display = sect === 'hor' && DATA.meta.has_ciclo ? '' : 'none';
+  const ym = $('y-min'), yx = $('y-max');
+  [ym, yx].forEach(r => { r.min = 0; r.max = cfg.yTop; r.step = cfg.yStep; });
+  syncYControls();
+  renderTags();
+  draw();
+}
+
+function renderTags() {
+  const sect = ui.sect, fmts = formats(sect), s = S[sect];
+  if (!s.active || !s.active.some(f => fmts.includes(f))) s.active = fmts.slice(0, Math.min(4, fmts.length));
+  s.active = s.active.filter(f => fmts.includes(f));
+  $('tags').innerHTML = fmts.map(fe => {
+    const i = s.active.indexOf(fe);
+    const style = i >= 0 ? ` style="background:${PAL[i % PAL.length]};border-color:${PAL[i % PAL.length]}"` : '';
+    return `<button class="fmt-tag${i >= 0 ? ' on' : ''}" data-fe="${encodeURIComponent(fe)}"${style}>${fe}</button>`;
+  }).join('');
+}
+
+function draw() {
+  const sect = ui.sect, s = S[sect], cfg = SECT[sect];
+  updateRangeInfo();
+  const series = s.active.map((fe, i) => {
+    const hrs = hours(sect, fe);
+    return { fe, hrs, pts: aggregate(hrs), color: PAL[i % PAL.length] };
+  }).filter(x => x.pts.length);
+
+  const gap = ui.res === 'hour' ? 3 * H : ui.res === 'day' ? 3 * D : 62 * D;
+  const single = series.length === 1;
+  const datasets = [];
+  series.forEach(({ fe, pts, color }) => {
+    let iMin = -1, iMax = -1;
+    if (single && pts.length > 2) {
+      pts.forEach((p, i) => { if (iMin < 0 || p.y < pts[iMin].y) iMin = i; if (iMax < 0 || p.y > pts[iMax].y) iMax = i; });
+    }
+    const base = ui.res === 'hour' ? 0 : ui.res === 'day' ? 1.5 : 3;
+    datasets.push({
+      label: fe, data: pts, borderColor: color, backgroundColor: color, yAxisID: 'y',
+      borderWidth: ui.res === 'hour' ? 1.2 : 2, tension: ui.res === 'month' ? 0.25 : 0, spanGaps: gap,
+      pointRadius: pts.map((_, i) => i === iMin || i === iMax ? 7 : base),
+      pointStyle: pts.map((_, i) => i === iMin || i === iMax ? 'triangle' : 'circle'),
+      pointBackgroundColor: pts.map((_, i) => i === iMin ? '#059669' : i === iMax ? '#dc2626' : color),
+      pointRotation: pts.map((_, i) => i === iMin ? 180 : 0),
+    });
+  });
+  if (single && series[0].pts.length > 2) {
+    const v = series[0].pts.map(p => p.y), p25 = quant(v, .25), p75 = quant(v, .75);
+    const x0 = series[0].pts[0].x, x1 = series[0].pts[series[0].pts.length - 1].x;
+    datasets.push({ label: '_p75', data: [{ x: x0, y: p75 }, { x: x1, y: p75 }], borderWidth: 0, pointRadius: 0, fill: '+1', backgroundColor: 'rgba(37,99,235,.08)', yAxisID: 'y' });
+    datasets.push({ label: '_p25', data: [{ x: x0, y: p25 }, { x: x1, y: p25 }], borderWidth: 0, pointRadius: 0, fill: false, yAxisID: 'y' });
+  }
+  const withCiclo = sect === 'hor' && DATA.meta.has_ciclo && ui.ciclo;
+  if (withCiclo) {
+    series.forEach(({ fe, pts, color }) => {
+      const cp = pts.filter(p => p.c != null).map(p => ({ x: p.x, y: p.c }));
+      if (cp.length) datasets.push({ label: 'ciclo|' + fe, data: cp, borderColor: color, borderWidth: 1.2, borderDash: [5, 3], pointRadius: ui.res === 'hour' ? 0 : 2, pointBackgroundColor: color, tension: ui.res === 'month' ? 0.25 : 0, spanGaps: gap, yAxisID: 'y2' });
     });
   }
 
-  const cicloRow = document.getElementById('hor-ciclo-row');
-  if (sect === 'hor' && DATA?.meta?.has_ciclo) {
-    cicloRow.style.display = 'block';
-    const btn = document.getElementById('hor-ciclo-btn');
-    btn.className = 'ciclo-toggle' + (showCiclo ? '' : ' off');
-    btn.innerHTML = `<span class="dot"></span> ${showCiclo ? 'Ocultar' : 'Mostrar'} ciclo (min) — eje derecho`;
-  } else if (cicloRow) {
-    cicloRow.style.display = 'none';
-  }
-
+  const [rf, rt] = rangeMs();
   const scales = {
-    x: { ticks: { font: { size: 10 }, maxRotation: 45, autoSkip: true, maxTicksLimit: resolution === 'month' ? 20 : resolution === 'day' ? 30 : 24 } },
-    y: { min: s.yMin || undefined, max: s.yMax || undefined, ticks: { font: { size: 10 } },
-         title: { display: true, text: 'Gas (kWht/m²)', font: { size: 11 }, color: '#6b7280' }, position: 'left' },
+    x: {
+      type: 'time', min: Math.max(rf, T0), max: Math.min(rt, Date.parse(DATA.meta.date_max + 'T00:00:00Z') + D),
+      ticks: { font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 12,
+        callback: v => fmtWhen(v, ui.res === 'hour' ? 'hour' : (rt - rf > 120 * D ? 'month' : 'day')) },
+      grid: { color: '#eef0f6' },
+    },
+    y: { position: 'left', min: s.yMin ?? undefined, max: s.yMax ?? undefined, ticks: { font: { size: 10 } },
+      title: { display: true, text: 'Gas (kWht/m²)', font: { size: 11 }, color: '#6b7280' }, grid: { color: '#eef0f6' } },
   };
-  if (hasCiclo && cicloDatasets.length) {
-    scales.y2 = { position: 'right', ticks: { font: { size: 10 }, color: '#d97706', callback: v => Math.round(v) + ' min' },
-                  title: { display: true, text: 'Ciclo (min)', font: { size: 11 }, color: '#d97706' }, grid: { drawOnChartArea: false } };
+  if (withCiclo && datasets.some(d => d.yAxisID === 'y2')) {
+    scales.y2 = { position: 'right', grid: { drawOnChartArea: false },
+      ticks: { font: { size: 10 }, color: '#d97706', callback: v => Math.round(v) + ' min' },
+      title: { display: true, text: 'Ciclo (min)', font: { size: 11 }, color: '#d97706' } };
   }
 
-  if (s.chart) s.chart.destroy();
-  s.chart = new Chart(document.getElementById(sect + '-canvas'), {
-    type: 'line', data: { labels, datasets },
+  if (chart) chart.destroy();
+  $('empty').classList.toggle('on', !series.length);
+  chart = new Chart($('canvas'), {
+    type: 'line', data: { datasets }, plugins: [franjasPlugin, eventsPlugin],
     options: {
-      responsive: true, maintainAspectRatio: false,
-      interaction: { mode: 'index', intersect: false },
+      responsive: true, maintainAspectRatio: false, animation: false, parsing: { xAxisKey: 'x', yAxisKey: 'y' },
+      interaction: { mode: 'nearest', axis: 'x', intersect: false },
       plugins: {
         legend: { display: false },
+        events: { items: eventsFor(sect) },
         tooltip: {
-          filter: ctx => !ctx.dataset.label.startsWith('_'),
+          filter: c => !c.dataset.label.startsWith('_'),
           callbacks: {
-            label: ctx => {
-              if (ctx.dataset.label.startsWith('ciclo|')) {
-                const fe = ctx.dataset.label.replace('ciclo|', '');
-                return `${fe} ciclo: ${ctx.parsed.y != null ? Math.round(ctx.parsed.y) : '—'} min`;
-              }
-              return `${ctx.dataset.label}: ${ctx.parsed.y != null ? ctx.parsed.y.toFixed(1) : '—'} kWht/m²`;
+            title: items => items.length ? fmtWhen(items[0].parsed.x, ui.res) : '',
+            label: c => {
+              if (c.dataset.label.startsWith('ciclo|')) return ` ${c.dataset.label.slice(6)} · ciclo ${Math.round(c.parsed.y)} min`;
+              const r = c.raw;
+              return ` ${c.dataset.label}: ${nf(c.parsed.y, cfg.dec)} kWht/m² · ${nInt(r.m)} m² · ${r.n} h`;
             },
           },
         },
@@ -526,117 +591,136 @@ function drawChart(sect) {
     },
   });
 
-  const legItems = [
-    ...series.map(({ fe, color }) => `<div class="leg-item"><div class="leg-line" style="background:${color}"></div><span>${fe} — gas</span></div>`),
-    fst ? `<div class="leg-item"><div class="leg-band" style="background:${bandColor};border-color:${mClr()}"></div><span>Banda P25–P75</span></div>` : '',
-    `<div class="leg-item"><span style="color:#059669;font-weight:700;font-size:14px">▼</span><span>Mejor gas</span></div>`,
-    `<div class="leg-item"><span style="color:#dc2626;font-weight:700;font-size:14px">▲</span><span>Peor gas</span></div>`,
-  ];
-  if (hasCiclo && cicloDatasets.length) {
-    cicloDatasets.forEach(({ fe, color }) => {
-      legItems.push(`<div class="leg-item" style="color:#d97706"><div class="leg-dashed" style="border-color:${color}"></div><span>${fe} — ciclo (min, moda)</span></div>`);
-    });
+  const leg = series.map(x => `<span class="leg"><i style="border-color:${x.color}"></i>${x.fe}</span>`);
+  if (withCiclo && series.length) leg.push(`<span class="leg" style="color:#d97706"><i class="dash" style="border-color:#d97706"></i>ciclo (mediana, eje derecho)</span>`);
+  if (single && series[0].pts.length > 2) {
+    leg.push(`<span class="leg"><i class="band" style="background:rgba(37,99,235,.08);border-color:#2563eb"></i>banda P25–P75</span>`);
+    leg.push(`<span class="leg"><span class="good">▼</span> mejor periodo</span><span class="leg"><span class="bad">▲</span> peor periodo</span>`);
   }
-  document.getElementById(sect + '-legend').innerHTML = legItems.join('');
+  if (eventsFor(sect).length) leg.push(`<span class="leg"><i class="evt"></i>evento</span>`);
+  $('legend').innerHTML = leg.join('');
+  renderSummary(series);
+  renderCompare();
 }
 
-function onZoom(sect) {
-  const s = S[sect];
-  s.yMin = parseFloat(document.getElementById(sect + '-ym').value);
-  s.yMax = parseFloat(document.getElementById(sect + '-yx').value);
-  if (s.yMin >= s.yMax - 0.5) { s.yMax = s.yMin + 0.5; document.getElementById(sect + '-yx').value = s.yMax; }
-  document.getElementById(sect + '-ym-v').textContent = s.yMin.toFixed(1);
-  document.getElementById(sect + '-yx-v').textContent = s.yMax.toFixed(1);
-  if (s.chart) { s.chart.options.scales.y.min = s.yMin; s.chart.options.scales.y.max = s.yMax; s.chart.update('none'); }
-}
-function autoZ(sect) {
-  const def = sect === 'hor' ? [0, 35] : [0, 15];
-  const s = S[sect]; s.yMin = def[0]; s.yMax = def[1];
-  document.getElementById(sect + '-ym').value = def[0]; document.getElementById(sect + '-yx').value = def[1];
-  document.getElementById(sect + '-ym-v').textContent = def[0]; document.getElementById(sect + '-yx-v').textContent = def[1];
-  if (s.chart) { s.chart.options.scales.y.min = undefined; s.chart.options.scales.y.max = undefined; s.chart.update('none'); }
-}
-function tightZ(sect) {
-  const s = S[sect];
-  const allVals = [];
-  (s.active || []).forEach(fe => { aggregate(getRaw(sect, fe)).forEach(r => allVals.push(r.value)); });
-  if (!allVals.length) return;
-  const lo = Math.min(...allVals), hi = Math.max(...allVals);
-  const pad = Math.max((hi - lo) * 0.15, 0.3);
-  s.yMin = Math.max(0, Math.round((lo - pad) * 4) / 4); s.yMax = Math.round((hi + pad) * 4) / 4;
-  document.getElementById(sect + '-ym').value = s.yMin; document.getElementById(sect + '-yx').value = s.yMax;
-  document.getElementById(sect + '-ym-v').textContent = s.yMin.toFixed(1); document.getElementById(sect + '-yx-v').textContent = s.yMax.toFixed(1);
-  if (s.chart) { s.chart.options.scales.y.min = s.yMin; s.chart.options.scales.y.max = s.yMax; s.chart.update('none'); }
+function renderSummary(series) {
+  const sect = ui.sect, cfg = SECT[sect], d = cfg.dec, resName = { hour: 'hora', day: 'día', month: 'mes' }[ui.res];
+  const lineTxt = S[sect].line === 0 ? 'L1 + L3' : 'L' + S[sect].line;
+  $('sum-title').textContent = `Resumen del periodo · ${cfg.name} ${lineTxt}`;
+  if (!series.length) { $('sum').innerHTML = ''; $('sum-note').textContent = ''; return; }
+  const ciclo = sect === 'hor' && DATA.meta.has_ciclo;
+  const rows = series.map(({ fe, hrs, pts, color }) => {
+    const gas = hrs.reduce((a, r) => a + r.gas, 0), m = hrs.reduce((a, r) => a + r.m, 0);
+    const v = pts.map(p => p.y);
+    const best = pts.reduce((a, p) => p.y < a.y ? p : a), worst = pts.reduce((a, p) => p.y > a.y ? p : a);
+    const cs = hrs.flatMap(r => r.cs);
+    return `<tr><td><span class="sw" style="background:${color}"></span>${fe}</td>
+      <td class="k">${nf(gas / m, d)}</td>
+      <td>${nf(quant(v, .25), d)} · <b>${nf(quant(v, .5), d)}</b> · ${nf(quant(v, .75), d)}</td>
+      <td class="good">${nf(best.y, d)}<small>${fmtWhen(best.x, ui.res)}</small></td>
+      <td class="bad">${nf(worst.y, d)}<small>${fmtWhen(worst.x, ui.res)}</small></td>
+      <td>${nInt(m)}</td><td>${nInt(hrs.length)}</td>
+      ${ciclo ? `<td>${cs.length ? Math.round(median(cs)) : '—'}</td>` : ''}</tr>`;
+  });
+  $('sum').innerHTML = `<thead><tr><th>Formato</th><th>Consumo medio<br>kWht/m²</th><th>P25 · mediana · P75<br>por ${resName}</th>
+    <th>Mejor ${resName}</th><th>Peor ${resName}</th><th>m² producidos</th><th>Horas</th>${ciclo ? '<th>Ciclo<br>min</th>' : ''}</tr></thead><tbody>${rows.join('')}</tbody>`;
+  $('sum-note').textContent = `Consumo medio = Σ gas / Σ m² de todas las horas del rango (ponderado por producción). `
+    + `Se excluyen las horas con menos de ${S[sect].minM2} m²/h (arranques, pruebas y huecos).`;
 }
 
-function toggleCiclo() { showCiclo = !showCiclo; drawChart('hor'); }
-function updateRange() {
-  const f = document.getElementById('d-from').value;
-  const t = document.getElementById('d-to').value;
-  if (f && t) {
-    const days = Math.round((new Date(t) - new Date(f)) / 86400000) + 1;
-    let info = `${days} días · ${f} → ${t}`;
-    if (resolution === 'hour' && days > 14) {
-      info += `  ·  ⚠ rango amplio en horario — considera reducir`;
+// ── Eje Y ────────────────────────────────────────────────────────────────────
+function syncYControls() {
+  const s = S[ui.sect], cfg = SECT[ui.sect];
+  $('y-min').value = s.yMin ?? 0; $('y-max').value = s.yMax ?? cfg.yTop;
+  $('y-min-v').textContent = s.yMin == null ? 'auto' : nf(s.yMin, 1);
+  $('y-max-v').textContent = s.yMax == null ? 'auto' : nf(s.yMax, 1);
+}
+function applyY() {
+  const s = S[ui.sect];
+  if (!chart) return;
+  chart.options.scales.y.min = s.yMin ?? undefined; chart.options.scales.y.max = s.yMax ?? undefined;
+  chart.update('none'); syncYControls();
+}
+
+// ── Eventos de la interfaz ───────────────────────────────────────────────────
+$('d-from').addEventListener('change', () => { ui.savedRange = null; draw(); });
+$('d-to').addEventListener('change', () => { ui.savedRange = null; draw(); });
+$('btn-all').addEventListener('click', () => { ui.savedRange = null; setFullRange(); draw(); });
+$('res-btns').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  const prev = ui.res; ui.res = b.dataset.res;
+  document.querySelectorAll('#res-btns button').forEach(x => x.classList.toggle('active', x === b));
+  if (ui.res === 'hour' && prev !== 'hour') {
+    const [f, t] = rangeMs();
+    if ((t - f) / D > 14) {
+      ui.savedRange = [$('d-from').value, $('d-to').value];
+      const end = lastDateOf(ui.sect);
+      $('d-to').value = end;
+      $('d-from').value = iso(Date.parse(end + 'T00:00:00Z') - 6 * D);
     }
-    document.getElementById('range-info').textContent = info;
+  } else if (prev === 'hour' && ui.res !== 'hour' && ui.savedRange) {
+    [$('d-from').value, $('d-to').value] = ui.savedRange; ui.savedRange = null;
   }
-}
-function onCtrlChange() { updateRange(); refreshActive(); }
-function setRes(r, btn) {
-  const prev = resolution;
-  resolution = r;
-  document.querySelectorAll('#res-btns button').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-
-  // Al cambiar a "Horario" desde otra resolución, si el rango es muy amplio
-  // limitamos a los últimos 7 días para evitar miles de puntos
-  if (r === 'hour' && prev !== 'hour' && DATA) {
-    const f = document.getElementById('d-from').value;
-    const t = document.getElementById('d-to').value;
-    const days = Math.round((new Date(t) - new Date(f)) / 86400000) + 1;
-    if (days > 14) {
-      const end = new Date(t);
-      const start = new Date(end);
-      start.setDate(end.getDate() - 6);
-      document.getElementById('d-from').value = start.toISOString().slice(0, 10);
-    }
-  }
-  updateRange();
-  refreshActive();
-}
-function setMetric(m, btn) {
-  metric = m;
-  document.getElementById('btn-mean').className = m === 'mean' ? 'active-mean' : '';
-  document.getElementById('btn-mode').className = m === 'mode' ? 'active-mode' : '';
-  refreshActive();
-}
-function setLine(sect, l, btn) {
-  S[sect].line = l;
-  document.querySelectorAll(`#${sect}-lbtns button`).forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  S[sect].active = null;
-  buildTags(sect); drawChart(sect);
-}
-function setSect(name, btn) {
-  document.querySelectorAll('.section-tab').forEach(t => t.className = 'section-tab');
-  document.querySelectorAll('.section-panel').forEach(p => p.classList.remove('active'));
-  btn.className = 'section-tab active-' + name.slice(0, 3);
-  document.getElementById('sp-' + name).classList.add('active');
-  initSect(name);
-}
-function initSect(sect) { if (!DATA) return; buildTags(sect); drawChart(sect); }
-function refreshActive() {
-  const a = document.querySelector('.section-panel.active');
-  if (!a || !DATA) return;
-  const sect = a.id.replace('sp-', '');
-  buildTags(sect); drawChart(sect);
-}
-
-['hor', 'esm'].forEach(s => {
-  const def = s === 'hor' ? 35 : 15;
-  document.getElementById(s + '-ym-v').textContent = '0';
-  document.getElementById(s + '-yx-v').textContent = def;
+  draw();
+});
+$('metric-btns').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  ui.metric = b.dataset.metric;
+  document.querySelectorAll('#metric-btns button').forEach(x => x.classList.toggle('active', x === b));
+  draw();
+});
+document.querySelector('.section-tabs').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  ui.sect = b.dataset.sect; renderSect();
+});
+$('line-btns').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  S[ui.sect].line = Number(b.dataset.line); S[ui.sect].active = null; renderSect();
+});
+$('tags').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  const fe = decodeURIComponent(b.dataset.fe), s = S[ui.sect];
+  if (s.active.includes(fe)) { if (s.active.length === 1) return; s.active = s.active.filter(f => f !== fe); }
+  else s.active.push(fe);
+  renderTags(); draw();
+});
+$('fr-btns').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  ui.frNext = b.dataset.fr; syncFrUI();
+});
+$('fr-clear').addEventListener('click', () => {
+  S[ui.sect].fr = { A: null, B: null }; ui.frNext = 'A';
+  if (chart) chart.draw(); renderCompare();
+});
+['A', 'B'].forEach(k => ['from', 'to'].forEach(w => $(`f${k}-${w}`).addEventListener('change', () => {
+  const f = $(`f${k}-from`).value, t = $(`f${k}-to`).value;
+  if (!f || !t) return;
+  const a = Date.parse(f + 'T00:00:00Z'), b = Date.parse(t + 'T00:00:00Z');
+  S[ui.sect].fr[k] = [Math.min(a, b), Math.max(a, b) + D];
+  if (chart) chart.draw(); renderCompare();
+})));
+$('min-m2').addEventListener('change', e => { S[ui.sect].minM2 = Math.max(0, Number(e.target.value) || 0); draw(); });
+$('chk-events').addEventListener('change', e => { ui.events = e.target.checked; draw(); });
+$('chk-ciclo').addEventListener('change', e => { ui.ciclo = e.target.checked; draw(); });
+$('y-min').addEventListener('input', e => {
+  const s = S[ui.sect]; s.yMin = Number(e.target.value);
+  if (s.yMax != null && s.yMin >= s.yMax) s.yMax = s.yMin + SECT[ui.sect].yStep;
+  applyY();
+});
+$('y-max').addEventListener('input', e => {
+  const s = S[ui.sect]; s.yMax = Number(e.target.value);
+  if (s.yMin != null && s.yMax <= s.yMin) s.yMin = Math.max(0, s.yMax - SECT[ui.sect].yStep);
+  applyY();
+});
+$('btn-yauto').addEventListener('click', () => { S[ui.sect].yMin = null; S[ui.sect].yMax = null; applyY(); });
+$('btn-ytight').addEventListener('click', () => {
+  if (!chart) return;
+  const v = chart.data.datasets.filter(d => d.yAxisID === 'y' && !d.label.startsWith('_')).flatMap(d => d.data.map(p => p.y));
+  if (!v.length) return;
+  const lo = quant(v, .02), hi = quant(v, .98), pad = Math.max((hi - lo) * 0.15, SECT[ui.sect].yStep);
+  S[ui.sect].yMin = Math.max(0, Math.floor((lo - pad) * 10) / 10);
+  S[ui.sect].yMax = Math.ceil((hi + pad) * 10) / 10;
+  applyY();
 });
 
 loadData();
