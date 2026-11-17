@@ -1,7 +1,29 @@
-# Dashboard Gas — Hornos & Esmaltado
+# Dashboard Gas — Hornos y Secaderos
 
-Dashboard web para visualizar el consumo de gas (kWht/m²) por formato y línea,
-con soporte para resolución diaria/mensual y métrica Media/Moda.
+Dashboard web para visualizar el consumo de gas (kWht/m²) de hornos y secaderos
+por línea y formato, en resolución horaria, diaria o mensual.
+
+> La hoja `v_esmalt_HoraGasEnergiaDisponib` del Excel recoge el gas de los
+> **secaderos** (están en serie con las líneas de esmaltado). Por eso la pestaña
+> se llama *Secaderos*.
+
+## 📐 Cómo se calcula
+
+- **Valor de cada periodo (día o mes):** media ponderada por producción,
+  Σ gas / Σ m² de las horas del periodo. Una hora de arranque con pocos m²
+  pesa poco, igual que en la factura. Alternativa: **Mediana** de los valores horarios.
+- **Filtro de producción mínima:** por defecto se excluyen las horas con menos
+  de **100 m²/h en hornos** y **50 m²/h en secaderos** (arranques, pruebas, huecos),
+  los mismos criterios que los estudios de ahorro. Se cambia en la propia web (0 = sin filtro).
+- **Hornos · Ambas:** L1 y L3 se suman hora a hora (Σ gas / Σ m²).
+- **Tabla resumen:** consumo medio del rango, P25 · mediana · P75 de los periodos,
+  mejor y peor periodo con su fecha, m², horas y ciclo.
+- **Comparar franjas A y B:** arrastra sobre el gráfico con el botón izquierdo
+  para marcar la franja A y después la B (o escribe las fechas). La tabla compara,
+  por formato, el consumo medio (Σ gas / Σ m²) y el ciclo medio de cada franja.
+- **Eventos:** líneas verticales con los cambios de instalación (POPPI, calorifugado…).
+- **Cabecera:** muestra la última hora con datos de hornos y de secaderos y avisa
+  si una de las dos hojas del Excel lleva más de 2 días de retraso.
 
 **URL pública** (una vez configurado GitHub Pages):  
 `https://<tu-usuario>.github.io/<nombre-repo>/`
@@ -119,21 +141,28 @@ python -m http.server 8080
 
 ## ⚙️ Personalización
 
-### Cambiar número de formatos mostrados
-
-En `scripts/process.py`, modifica:
+Todo se configura al principio de `scripts/process.py`:
 
 ```python
-TOP_N_HOR = 10   # formatos por línea en hornos
-TOP_N_ESM = 8    # formatos por línea en esmaltado
+MIN_M2_FMT = 1000                        # m² mínimos para que un formato aparezca
+DEFAULT_MIN_M2_H = {"hor": 100, "esm": 50}  # filtro m²/h por defecto en la web
+LINE_CUTS_HOR = {1: 100, 3: 100}         # kWht/m² máximo por hora (hornos)
+LINE_CUTS_ESM = {1: 160, 2: 333, ...}    # kWht/m² máximo por hora (secaderos)
+
+EVENTS = [                               # líneas verticales en el gráfico
+    {"date": "2026-04-16", "sect": "esm", "label": "POPPI nuevo"},
+    {"date": "2026-01-01", "sect": "hor", "line": 1, "label": "Calorifugado H1"},
+]
 ```
 
-### Cambiar los límites de outliers
+Para añadir un evento basta con añadir una línea a `EVENTS` y subir el cambio:
+la Action regenera el dashboard sola.
 
-```python
-LINE_CUTS_HOR = {1: 100, 3: 100}       # kWht/m² máximo hornos
-LINE_CUTS_ESM = {1: 160, 2: 333, ...}  # kWht/m² máximo esmaltado
-```
+### Formatos "No encontrado"
+
+Las horas de hornos cuyo modelo no está en la tabla de códigos de artículo del
+Excel salen como *No encontrado* y no se muestran. Si aparece un producto nuevo,
+hay que darlo de alta en esa tabla.
 
 ### Cambiar el nombre del fichero Excel
 
