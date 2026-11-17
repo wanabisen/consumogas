@@ -156,7 +156,7 @@
       <span>Franjas a comparar:</span>
       <div class="btn-group" id="fr-btns"><button data-fr="A" class="fr-btn">Marcar A</button><button data-fr="B" class="fr-btn">Marcar B</button></div>
       <button class="small-btn" id="fr-clear">Borrar franjas</button>
-      <span>Arrastra sobre el gráfico con el botón izquierdo pulsado.</span>
+      <span>Arrastra sobre el gráfico con el botón izquierdo pulsado. Para ajustar una franja, arrastra sus bordes (cursor ↔).</span>
     </div>
     <div class="legend" id="legend"></div>
     <div class="chart-wrap"><canvas id="canvas"></canvas><div class="empty" id="empty">Sin datos para esta selección: prueba otro rango, otro formato o baja el filtro de m²/h.</div></div>
@@ -375,8 +375,10 @@ const franjasPlugin = {
     };
     ctx.save();
     const fr = S[ui.sect].fr;
-    ['A', 'B'].forEach(k => { if (fr[k]) box(x.getPixelForValue(fr[k][0]), x.getPixelForValue(fr[k][1]), FR_COL[k], k); });
-    if (drag) box(drag.x0, drag.x1, FR_COL[ui.frNext], ui.frNext);
+    ['A', 'B'].forEach(k => {
+      if (fr[k] && !(drag && drag.k === k)) box(x.getPixelForValue(fr[k][0]), x.getPixelForValue(fr[k][1]), FR_COL[k], k);
+    });
+    if (drag) { const k = drag.k || ui.frNext; box(drag.x0, drag.x1, FR_COL[k], k); }
     ctx.restore();
   },
 };
@@ -455,26 +457,53 @@ function renderCompare() {
 
 const cv = $('canvas');
 const pxOf = e => e.clientX - cv.getBoundingClientRect().left;
+// Borde de una franja bajo el puntero (±7 px): { k, fixed: px del borde contrario }
+function edgeAt(px) {
+  if (!chart) return null;
+  const x = chart.scales.x, fr = S[ui.sect].fr;
+  let best = null;
+  ['A', 'B'].forEach(k => {
+    if (!fr[k]) return;
+    const p0 = x.getPixelForValue(fr[k][0]), p1 = x.getPixelForValue(fr[k][1]);
+    [[p0, p1], [p1, p0]].forEach(([edge, fixed]) => {
+      const d = Math.abs(px - edge);
+      if (d <= 7 && (!best || d < best.d)) best = { k, fixed, d };
+    });
+  });
+  return best;
+}
 cv.addEventListener('pointerdown', e => {
   if (e.button !== 0 || !chart) return;
   const a = chart.chartArea, px = pxOf(e);
-  if (px < a.left || px > a.right) return;
-  drag = { x0: px, x1: px };
+  if (px < a.left - 7 || px > a.right + 7) return;
+  const edge = edgeAt(px);
+  drag = edge ? { x0: edge.fixed, x1: px, k: edge.k } : { x0: px, x1: px };
   cv.setPointerCapture(e.pointerId);
 });
 cv.addEventListener('pointermove', e => {
-  if (!drag) return;
+  const px = pxOf(e);
+  if (!drag) { cv.style.cursor = edgeAt(px) ? 'ew-resize' : 'crosshair'; return; }
   const a = chart.chartArea;
-  drag.x1 = Math.max(a.left, Math.min(a.right, pxOf(e)));
+  drag.x1 = Math.max(a.left, Math.min(a.right, px));
   chart.draw();
 });
 cv.addEventListener('pointerup', () => {
   if (!drag) return;
   const dd = drag; drag = null;
-  if (Math.abs(dd.x1 - dd.x0) < 5) { chart.draw(); return; }
-  const x = chart.scales.x, k = ui.frNext;
-  S[ui.sect].fr[k] = snapRange(x.getValueForPixel(dd.x0), x.getValueForPixel(dd.x1));
-  ui.frNext = k === 'A' ? 'B' : 'A';
+  const x = chart.scales.x, fr = S[ui.sect].fr;
+  if (dd.k) {
+    // Mover un borde: el otro se queda fijo y el movido se ajusta al periodo más cercano
+    const fixed = x.getValueForPixel(dd.x0), moved = nearestBucket(x.getValueForPixel(dd.x1));
+    const fx = nearestBucket(fixed);
+    let s = Math.min(fx, moved), en = Math.max(fx, moved);
+    if (en <= s) en = nextBucket(s);
+    fr[dd.k] = [s, en];
+  } else {
+    if (Math.abs(dd.x1 - dd.x0) < 5) { chart.draw(); return; }
+    const k = ui.frNext;
+    fr[k] = snapRange(x.getValueForPixel(dd.x0), x.getValueForPixel(dd.x1));
+    ui.frNext = k === 'A' ? 'B' : 'A';
+  }
   chart.draw(); renderCompare();
 });
 cv.addEventListener('pointercancel', () => { drag = null; if (chart) chart.draw(); });
