@@ -438,6 +438,11 @@ function renderCompare() {
     const x = Math.round((b.ci - a.ci) * 10) / 10;
     return `${x > 0 ? '+' : ''}${nf(x === 0 ? 0 : x, 1)}`;
   };
+  const prodDiff = (a, b) => {
+    if (!a?.n || !b?.n) return '<td>—</td>';
+    const p = ((b.m / b.n) - (a.m / a.n)) / (a.m / a.n) * 100;
+    return `<td>${p > 0 ? '+' : ''}${nf(p, 1)} %</td>`;
+  };
   const few = st => st?.n && st.n < 24 ? '<span class="few" title="Menos de 24 horas: resultado poco fiable">⚠</span>' : '';
   const active = S[sect].active || [];
   const rows = active.map((fe, i) => {
@@ -445,13 +450,13 @@ function renderCompare() {
     return `<tr><td><span class="sw" style="background:${PAL[i % PAL.length]}"></span>${fe}</td>
       <td>${v(a, s => nf(s.ce, d))}</td><td>${v(b, s => nf(s.ce, d))}</td>${pctDiff(a, b)}
       ${ciclo ? `<td>${v(a, s => s.ci == null ? '—' : nf(s.ci, 1))}</td><td>${v(b, s => s.ci == null ? '—' : nf(s.ci, 1))}</td><td>${ciDiff(a, b)}</td>` : ''}
-      <td>${v(a, s => nInt(s.m))}</td><td>${v(b, s => nInt(s.m))}</td>
+      <td>${v(a, s => nInt(s.m / s.n))}</td><td>${v(b, s => nInt(s.m / s.n))}</td>${prodDiff(a, b)}
       <td>${a?.n ?? '—'}${few(a)} · ${b?.n ?? '—'}${few(b)}</td></tr>`;
   });
   $('cmp').innerHTML = `<thead><tr><th>Formato</th><th class="A">Consumo A<br>kWht/m²</th><th class="B">Consumo B<br>kWht/m²</th><th>B frente a A</th>
     ${ciclo ? '<th class="A">Ciclo A<br>min</th><th class="B">Ciclo B<br>min</th><th>Dif. ciclo<br>min</th>' : ''}
-    <th class="A">m² A</th><th class="B">m² B</th><th>Horas<br>A · B</th></tr></thead><tbody>${rows.join('')}</tbody>`;
-  $('cmp-note').textContent = `Consumo medio = Σ gas / Σ m² de las horas de cada franja; ciclo medio = media de las horas con ciclo. `
+    <th class="A">m²/h A</th><th class="B">m²/h B</th><th>Dif. m²/h</th><th>Horas<br>A · B</th></tr></thead><tbody>${rows.join('')}</tbody>`;
+  $('cmp-note').textContent = `Consumo medio = Σ gas / Σ m² de las horas de cada franja; ciclo medio = media de las horas con ciclo; m²/h = m² producidos / horas con producción. `
     + `Mismo filtro de producción que el gráfico (mín. ${S[sect].minM2} m²/h). Verde: B consume menos que A. ⚠ = menos de 24 horas.`;
 }
 
